@@ -215,7 +215,7 @@
         <div class="status-dot"></div>
         <span class="status-text">Live Server Connected</span>
         <span class="records-badge" id="records-badge">— records</span>
-        <span class="unit-badge">Qty in Kg</span>
+        <span class="unit-badge">Qty</span>
       </div>
       <input class="search-box" type="text" placeholder="Search items..." id="table-search" oninput="renderTable()">
     </div>
@@ -497,10 +497,10 @@ function renderKPIs(fd) {
   const kpis = [
     {key:'proj', cls:'proj', label:'PROJECTION', sub:'Planned Qty'},
     {key:'so',   cls:'so',   label:'SALES ORDERS', sub:'Ordered Qty'},
-    {key:'disp', cls:'disp', label:'DISPATCHED', sub:'Delivered Kg'},
-    {key:'pend', cls:'pend', label:'PENDING', sub:'Pending Kg'},
-    {key:'clsd', cls:'clsd', label:'CLOSED', sub:'Closed Kg'},
-    {key:'prdn', cls:'prdn', label:'PRODUCTION', sub:'Produced Kg'},
+    {key:'disp', cls:'disp', label:'DISPATCHED', sub:'Delivered Qty'},
+    {key:'pend', cls:'pend', label:'PENDING', sub:'Pending Qty'},
+    {key:'clsd', cls:'clsd', label:'CLOSED', sub:'Closed Qty'},
+    {key:'prdn', cls:'prdn', label:'PRODUCTION', sub:'Produced Qty'},
   ];
   grid.innerHTML = kpis.map(k => `
     <div class="kpi-card ${k.cls} ${activeMetrics.has(k.key)?'active':''}" onclick="toggleMetric('${k.key}')">
