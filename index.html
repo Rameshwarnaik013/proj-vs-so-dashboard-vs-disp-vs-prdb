@@ -741,7 +741,7 @@ function processExcelData(projRows, soRows, prdnRows) {
   }
 
   function getMMM(row, isProj) {
-    let val = row['MMM-YY'];
+    let val = row['MMM-YY'] || row['MMM - YY'];
     if (val) {
       if (val instanceof Date) {
         const d = val;
@@ -751,7 +751,15 @@ function processExcelData(projRows, soRows, prdnRows) {
       if (typeof val === 'string' && val.includes('-')) return val.trim();
     }
     const m = String(row['Month']||'').trim();
-    return isProj ? (MONTH_MAP[m] || null) : (row['Year'] || MONTH_MAP[m] || null);
+    if (MONTH_MAP[m]) return MONTH_MAP[m];
+    // Fallback logic
+    const y = String(row['Year']||'').trim();
+    if (m && y) {
+      const ms = m.slice(0,3);
+      const ys = y.length === 4 ? y.slice(-2) : y;
+      return `${ms.charAt(0).toUpperCase() + ms.slice(1).toLowerCase()}-${ys}`;
+    }
+    return null;
   }
 
   function agg(rows, mmmFn, valFn) {
@@ -765,10 +773,11 @@ function processExcelData(projRows, soRows, prdnRows) {
   }
 
   // Column Mappings (Supports both KGs and Qty variations)
-  const COL_SO = ['Stock Qty In Kg', 'Stock Qty In Kgs'];
-  const COL_DISP = ['Delivered Qty', 'Delivered KGs'];
-  const COL_PEND = ['Pending Qty', 'Pending KGs'];
-  const COL_CLSD = ['Closed Qty', 'Closed KGs'];
+  const COL_SO = ['Stock Qty In Kg', 'Stock Qty In Kgs', 'Stock Qty', 'Qty in Kg', 'Quantity'];
+  const COL_DISP = ['Delivered KGs', 'Delivered Qty'];
+  const COL_PEND = ['Pending KGs', 'Pending Qty'];
+  const COL_CLSD = ['Closed KGs', 'Closed Qty'];
+  const COL_PRDN = ['Produced Kg', 'Produced Qty', 'Production Qty', 'Stock Qty In Kg'];
 
   const projM = agg(projRows, r=>getMMM(r,true), r=>getV(r, COL_SO));
   const soM = agg(soRows, r=>getMMM(r,false), r=>getV(r, COL_SO));
@@ -777,7 +786,7 @@ function processExcelData(projRows, soRows, prdnRows) {
   const clsdM = agg(soRows, r=>getMMM(r,false), r=>getV(r, COL_CLSD));
   
   const prdnFY = prdnRows.filter(r => MONTHS.includes(r['MMM-YY'] || getMMM(r, false)));
-  const prdnM = agg(prdnFY, r=>r['MMM-YY'] || getMMM(r, false), r=>getV(r, COL_SO));
+  const prdnM = agg(prdnFY, r=>r['MMM-YY'] || getMMM(r, false), r=>getV(r, COL_PRDN));
 
   const monthly = {months:MONTHS, proj:[], so:[], disp:[], pend:[], clsd:[], prdn:[]};
   MONTHS.forEach(m => {
@@ -828,7 +837,7 @@ function processExcelData(projRows, soRows, prdnRows) {
       const m = r['MMM-YY'] || getMMM(r, false);
       if(!MONTHS.includes(m)) return;
       if(!map[n]) map[n]={proj:0,so:0,disp:0,pend:0,clsd:0,prdn:0};
-      map[n].prdn += getV(r, COL_SO);
+      map[n].prdn += getV(r, COL_PRDN);
     });
     return Object.entries(map).map(([name,v]) => ({
       name, ...v,

@@ -742,53 +742,42 @@ function processExcelData(projRows, soRows, prdnRows) {
   }
 
   function getMMM(row, isProj) {
-    let val = row['MMM-YY'];
+    let val = row['MMM-YY'] || row['MMM - YY'];
     if (val) {
       if (val instanceof Date) {
         const d = val;
         const mnn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const m = mnn[d.getMonth()];
-        const y = d.getFullYear().toString().slice(-2);
-        return `${m}-${y}`;
+        return `${mnn[d.getMonth()]}-${d.getFullYear().toString().slice(-2)}`;
       }
       if (typeof val === 'string' && val.includes('-')) return val.trim();
     }
-    
-    if (isProj) {
-      const m = String(row['Month']||'').trim();
-      return MONTH_MAP[m] || null;
-    } else {
-      // SO sheet might have different date column
-      const m = String(row['Month'] || '').trim();
-      return row['Year'] || MONTH_MAP[m] || null;
+    const m = String(row['Month']||'').trim();
+    if (MONTH_MAP[m]) return MONTH_MAP[m];
+    // Fallback logic
+    const y = String(row['Year']||'').trim();
+    if (m && y) {
+      const ms = m.slice(0,3);
+      const ys = y.length === 4 ? y.slice(-2) : y;
+      return `${ms.charAt(0).toUpperCase() + ms.slice(1).toLowerCase()}-${ys}`;
     }
+    return null;
   }
 
-  // Aggregate
-  function agg(rows, mmmFn, valFn) {
-    const res = {};
-    rows.forEach(r => {
-      const m = mmmFn(r);
-      if (!MONTHS.includes(m)) return;
-      if (!res[m]) res[m] = 0;
-      res[m] += valFn(r)||0;
-    });
-    return res;
-  }
+  // Column Mappings (Supports both KGs and Qty variations)
+  const COL_SO = ['Stock Qty In Kg', 'Stock Qty In Kgs', 'Stock Qty', 'Qty in Kg', 'Quantity'];
+  const COL_DISP = ['Delivered KGs', 'Delivered Qty'];
+  const COL_PEND = ['Pending KGs', 'Pending Qty'];
+  const COL_CLSD = ['Closed KGs', 'Closed Qty'];
+  const COL_PRDN = ['Produced Kg', 'Produced Qty', 'Production Qty', 'Stock Qty In Kg'];
 
-  // Mappings per user request:
-  // SO: Stock Qty In Kg
-  // Dispatch: Delivered KGs
-  // Pending: Pending KGs
-  // Closed: Closed KGs
-  const projM = agg(projRows, r=>getMMM(r,true), r=>getV(r, ['Stock Qty In Kg', 'Stock Qty In Kgs']));
-  const soM = agg(soRows, r=>getMMM(r,false), r=>getV(r, 'Stock Qty In Kg'));
-  const dispM = agg(soRows, r=>getMMM(r,false), r=>getV(r, 'Delivered KGs'));
-  const pendM = agg(soRows, r=>getMMM(r,false), r=>getV(r, 'Pending KGs'));
-  const clsdM = agg(soRows, r=>getMMM(r,false), r=>getV(r, 'Closed KGs'));
+  const projM = agg(projRows, r=>getMMM(r,true), r=>getV(r, COL_SO));
+  const soM = agg(soRows, r=>getMMM(r,false), r=>getV(r, COL_SO));
+  const dispM = agg(soRows, r=>getMMM(r,false), r=>getV(r, COL_DISP));
+  const pendM = agg(soRows, r=>getMMM(r,false), r=>getV(r, COL_PEND));
+  const clsdM = agg(soRows, r=>getMMM(r,false), r=>getV(r, COL_CLSD));
   
   const prdnFY = prdnRows.filter(r => MONTHS.includes(r['MMM-YY'] || getMMM(r, false)));
-  const prdnM = agg(prdnFY, r=>r['MMM-YY'] || getMMM(r, false), r=>getV(r, ['Stock Qty In Kg', 'Stock Qty In Kgs']));
+  const prdnM = agg(prdnFY, r=>r['MMM-YY'] || getMMM(r, false), r=>getV(r, COL_PRDN));
 
   const monthly = {months:MONTHS, proj:[], so:[], disp:[], pend:[], clsd:[], prdn:[]};
   MONTHS.forEach(m => {
@@ -824,23 +813,23 @@ function processExcelData(projRows, soRows, prdnRows) {
       const n = String(r[dimKey_p]||'').trim(); if(!n) return;
       const m = getMMM(r,true); if(!MONTHS.includes(m)) return;
       if(!map[n]) map[n]={proj:0,so:0,disp:0,pend:0,clsd:0,prdn:0};
-      map[n].proj += getV(r, 'Stock Qty In Kg');
+      map[n].proj += getV(r, COL_SO);
     });
     rows_s.forEach(r => {
       const n = String(r[dimKey_s]||'').trim(); if(!n) return;
       const m = getMMM(r,false); if(!MONTHS.includes(m)) return;
       if(!map[n]) map[n]={proj:0,so:0,disp:0,pend:0,clsd:0,prdn:0};
-      map[n].so += getV(r, 'Stock Qty In Kg');
-      map[n].disp += getV(r, 'Delivered KGs');
-      map[n].pend += getV(r, 'Pending KGs');
-      map[n].clsd += getV(r, 'Closed KGs');
+      map[n].so += getV(r, COL_SO);
+      map[n].disp += getV(r, COL_DISP);
+      map[n].pend += getV(r, COL_PEND);
+      map[n].clsd += getV(r, COL_CLSD);
     });
     rows_r.forEach(r => {
       const n = String(r[dimKey_r]||'').trim(); if(!n) return;
       const m = r['MMM-YY'] || getMMM(r, false);
       if(!MONTHS.includes(m)) return;
       if(!map[n]) map[n]={proj:0,so:0,disp:0,pend:0,clsd:0,prdn:0};
-      map[n].prdn += getV(r, 'Stock Qty In Kg');
+      map[n].prdn += getV(r, COL_PRDN);
     });
     return Object.entries(map).map(([name,v]) => ({
       name, ...v,
