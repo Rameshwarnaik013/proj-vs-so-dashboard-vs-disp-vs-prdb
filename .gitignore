@@ -1,0 +1,8 @@
+# Excel files (Large data)
+*.xlsx
+*.xls
+*.xlsb
+~$*
+
+# Vercel temporary files
+.vercel
