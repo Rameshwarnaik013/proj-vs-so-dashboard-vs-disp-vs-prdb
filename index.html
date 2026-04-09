@@ -585,8 +585,8 @@ function renderCharts(fd) {
       }))
     },
     options: { ...chartDefaults, scales:{
-      x:{...chartDefaults.scales.x, stacked:false},
-      y:{...chartDefaults.scales.y, stacked:false}
+      x:{...chartDefaults.scales.x, stacked:true},
+      y:{...chartDefaults.scales.y, stacked:true}
     }}
   });
 }
@@ -905,11 +905,64 @@ function renderAll() {
 }
 
 // ============================================================
+// LIVE SYNC
+// ============================================================
+function initLiveSync() {
+  const statusDot = document.querySelector('.status-dot');
+  const statusText = document.querySelector('.status-text');
+  
+  const connect = () => {
+    console.log('Attempting Live Sync connection...');
+    const es = new EventSource('http://localhost:8080/events');
+    
+    es.onopen = () => {
+      statusDot.style.background = '#10B981';
+      statusDot.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.4)';
+      statusText.innerText = 'Live Excel Sync: Active';
+    };
+    
+    es.onerror = () => {
+      statusDot.style.background = '#6B7280';
+      statusDot.style.boxShadow = 'none';
+      statusText.innerText = 'Live Sync: Offline';
+      es.close();
+      setTimeout(connect, 5000);
+    };
+    
+    es.addEventListener('update', async (e) => {
+      console.log('Update received:', e.data);
+      try {
+        const response = await fetch('http://localhost:8080/latest?' + new Date().getTime());
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          processExcelData(workbook);
+          renderAll();
+          
+          // Show a brief success pulse
+          statusDot.style.transform = 'scale(1.5)';
+          setTimeout(() => statusDot.style.transform = 'scale(1)', 300);
+        };
+        reader.readAsArrayBuffer(blob);
+      } catch (err) {
+        console.error('Refresh failed:', err);
+      }
+    });
+  };
+  
+  connect();
+}
+
+// ============================================================
 // INIT
 // ============================================================
 window.addEventListener('DOMContentLoaded', () => {
   buildFilters();
   renderAll();
+  initLiveSync();
   document.getElementById('loading').classList.add('hidden');
 });
 </script>
