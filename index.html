@@ -728,19 +728,34 @@ function processExcelData(projRows, soRows, prdnRows) {
   const MONTH_MAP = {April:'Apr-25',May:'May-25',June:'Jun-25',July:'Jul-25',August:'Aug-25',September:'Sep-25',October:'Oct-25',November:'Nov-25',December:'Dec-25',January:'Jan-26',February:'Feb-26',March:'Mar-26'};
   const QMAP_M = {'Apr-25':'Q1 (Apr-Jun)','May-25':'Q1 (Apr-Jun)','Jun-25':'Q1 (Apr-Jun)','Jul-25':'Q2 (Jul-Sep)','Aug-25':'Q2 (Jul-Sep)','Sep-25':'Q2 (Jul-Sep)','Oct-25':'Q3 (Oct-Dec)','Nov-25':'Q3 (Oct-Dec)','Dec-25':'Q3 (Oct-Dec)','Jan-26':'Q4 (Jan-Mar)','Feb-26':'Q4 (Jan-Mar)','Mar-26':'Q4 (Jan-Mar)'};
 
-  // Helper to get value from row with robust column name matching
-  function getV(row, names) {
-    if (typeof names === 'string') names = [names];
-    for (let name of names) {
-      if (row[name] !== undefined) return +row[name] || 0;
-      const lower = name.toLowerCase().trim();
-      const match = Object.keys(row).find(k => k.toLowerCase().trim() === lower);
-      if (match) return +row[match] || 0;
+  const COL_SO_KEYS = ['Stock Qty In Kg', 'Stock Qty In Kgs', 'Stock Qty', 'Qty in Kg', 'Quantity'];
+  const COL_DISP_KEYS = ['Delivered KGs', 'Delivered Qty'];
+  const COL_PEND_KEYS = ['Pending KGs', 'Pending Qty'];
+  const COL_CLSD_KEYS = ['Closed KGs', 'Closed Qty'];
+  const COL_PRDN_KEYS = ['Produced Kg', 'Produced Qty', 'Production Qty', 'Stock Qty In Kg'];
+
+  // Resolve consistent mapping for column names once
+  function resolveCol(rows, searchKeys) {
+    if (!rows || rows.length === 0) return null;
+    const first = rows[0];
+    const keys = Object.keys(first);
+    for (const sk of searchKeys) {
+      if (first[sk] !== undefined) return sk;
+      const lower = sk.toLowerCase().trim();
+      const match = keys.find(k => k.toLowerCase().trim() === lower);
+      if (match) return match;
     }
-    return 0;
+    return null;
   }
 
-  function getMMM(row, isProj) {
+  const c_p_so = resolveCol(projRows, COL_SO_KEYS);
+  const c_s_so = resolveCol(soRows, COL_SO_KEYS);
+  const c_s_disp = resolveCol(soRows, COL_DISP_KEYS);
+  const c_s_pend = resolveCol(soRows, COL_PEND_KEYS);
+  const c_s_clsd = resolveCol(soRows, COL_CLSD_KEYS);
+  const c_r_prdn = resolveCol(prdnRows, COL_PRDN_KEYS);
+
+  function getMMM(row) {
     let val = row['MMM-YY'] || row['MMM - YY'];
     if (val) {
       if (val instanceof Date) {
@@ -752,7 +767,6 @@ function processExcelData(projRows, soRows, prdnRows) {
     }
     const m = String(row['Month']||'').trim();
     if (MONTH_MAP[m]) return MONTH_MAP[m];
-    // Fallback logic
     const y = String(row['Year']||'').trim();
     if (m && y) {
       const ms = m.slice(0,3);
@@ -762,136 +776,121 @@ function processExcelData(projRows, soRows, prdnRows) {
     return null;
   }
 
-  function agg(rows, mmmFn, valFn) {
-    const res = {};
-    rows.forEach(r => {
-      const m = mmmFn(r);
-      if (!MONTHS.includes(m)) return;
-      res[m] = (res[m]||0) + (valFn(r)||0);
-    });
-    return res;
+  const monthly = { proj: {}, so: {}, disp: {}, pend: {}, clsd: {}, prdn: {} };
+  const dim_tables = {}; 
+  const dim_data = {}; 
+  const filter_opts = {};
+  
+  const dims = Object.keys(DIM_LABELS);
+  dims.forEach(d => {
+    dim_tables[d] = {};
+    dim_data[d] = {};
+    filter_opts[d] = new Set();
+  });
+
+  function ensurePath(obj, d, name, m) {
+    if (!obj[d]) obj[d] = {};
+    if (!obj[d][name]) obj[d][name] = {};
+    if (m && !obj[d][name][m]) obj[d][name][m] = { proj: 0, so: 0, disp: 0, pend: 0, clsd: 0, prdn: 0 };
+    return obj[d][name];
   }
 
-  // Column Mappings (Supports both KGs and Qty variations)
-  const COL_SO = ['Stock Qty In Kg', 'Stock Qty In Kgs', 'Stock Qty', 'Qty in Kg', 'Quantity'];
-  const COL_DISP = ['Delivered KGs', 'Delivered Qty'];
-  const COL_PEND = ['Pending KGs', 'Pending Qty'];
-  const COL_CLSD = ['Closed KGs', 'Closed Qty'];
-  const COL_PRDN = ['Produced Kg', 'Produced Qty', 'Production Qty', 'Stock Qty In Kg'];
+  // 1. Process PROJECTION rows
+  projRows.forEach(r => {
+    const m = getMMM(r);
+    if (!MONTHS.includes(m)) return;
+    const val = +r[c_p_so] || 0;
+    monthly.proj[m] = (monthly.proj[m] || 0) + val;
+    dims.forEach(d => {
+      const n = String(r[d] || r[d.trim()] || '').trim(); // Handle trailing spaces in keys
+      if (!n) return;
+      filter_opts[d].add(n);
+      const rowObj = ensurePath(dim_tables, d, n, null);
+      if (!rowObj.proj) rowObj.proj = 0; rowObj.proj += val;
+      const dataObj = ensurePath(dim_data, d, n, m);
+      dataObj[m].proj += val;
+    });
+  });
 
-  const projM = agg(projRows, r=>getMMM(r,true), r=>getV(r, COL_SO));
-  const soM = agg(soRows, r=>getMMM(r,false), r=>getV(r, COL_SO));
-  const dispM = agg(soRows, r=>getMMM(r,false), r=>getV(r, COL_DISP));
-  const pendM = agg(soRows, r=>getMMM(r,false), r=>getV(r, COL_PEND));
-  const clsdM = agg(soRows, r=>getMMM(r,false), r=>getV(r, COL_CLSD));
-  
-  const prdnFY = prdnRows.filter(r => MONTHS.includes(r['MMM-YY'] || getMMM(r, false)));
-  const prdnM = agg(prdnFY, r=>r['MMM-YY'] || getMMM(r, false), r=>getV(r, COL_PRDN));
+  // 2. Process SO and DISPATCH rows
+  soRows.forEach(r => {
+    const m = getMMM(r);
+    if (!MONTHS.includes(m)) return;
+    const soV = +r[c_s_so] || 0;
+    const dispV = +r[c_s_disp] || 0;
+    const pendV = +r[c_s_pend] || 0;
+    const clsdV = +r[c_s_clsd] || 0;
+    
+    monthly.so[m] = (monthly.so[m] || 0) + soV;
+    monthly.disp[m] = (monthly.disp[m] || 0) + dispV;
+    monthly.pend[m] = (monthly.pend[m] || 0) + pendV;
+    monthly.clsd[m] = (monthly.clsd[m] || 0) + clsdV;
 
-  const monthly = {months:MONTHS, proj:[], so:[], disp:[], pend:[], clsd:[], prdn:[]};
+    dims.forEach(d => {
+      const n = String(r[d] || r[d.trim()] || '').trim();
+      if (!n) return;
+      filter_opts[d].add(n);
+      const rowObj = ensurePath(dim_tables, d, n, null);
+      if (!rowObj.so) { rowObj.so=0; rowObj.disp=0; rowObj.pend=0; rowObj.clsd=0; }
+      rowObj.so += soV; rowObj.disp += dispV; rowObj.pend += pendV; rowObj.clsd += clsdV;
+      const dataObj = ensurePath(dim_data, d, n, m);
+      dataObj[m].so += soV; dataObj[m].disp += dispV; dataObj[m].pend += pendV; dataObj[m].clsd += clsdV;
+    });
+  });
+
+  // 3. Process PRODUCTION rows
+  prdnRows.forEach(r => {
+    const m = r['MMM-YY'] || getMMM(r);
+    if (!MONTHS.includes(m)) return;
+    const val = +r[c_r_prdn] || 0;
+    monthly.prdn[m] = (monthly.prdn[m] || 0) + val;
+    dims.forEach(d => {
+      const n = String(r[d] || r[d.trim()] || '').trim();
+      if (!n) return;
+      const rowObj = ensurePath(dim_tables, d, n, null);
+      if (!rowObj.prdn) rowObj.prdn = 0; rowObj.prdn += val;
+      const dataObj = ensurePath(dim_data, d, n, m);
+      dataObj[m].prdn += val;
+    });
+  });
+
+  // Final transformation
+  const final_monthly = { months: MONTHS, proj: [], so: [], disp: [], pend: [], clsd: [], prdn: [] };
   MONTHS.forEach(m => {
-    monthly.proj.push(Math.round(projM[m]||0));
-    monthly.so.push(Math.round(soM[m]||0));
-    monthly.disp.push(Math.round(dispM[m]||0));
-    monthly.pend.push(Math.round(pendM[m]||0));
-    monthly.clsd.push(Math.round(clsdM[m]||0));
-    monthly.prdn.push(Math.round(prdnM[m]||0));
+    final_monthly.proj.push(Math.round(monthly.proj[m] || 0));
+    final_monthly.so.push(Math.round(monthly.so[m] || 0));
+    final_monthly.disp.push(Math.round(monthly.disp[m] || 0));
+    final_monthly.pend.push(Math.round(monthly.pend[m] || 0));
+    final_monthly.clsd.push(Math.round(monthly.clsd[m] || 0));
+    final_monthly.prdn.push(Math.round(monthly.prdn[m] || 0));
   });
 
   const kpis = {
-    proj: monthly.proj.reduce((a,b)=>a+b,0),
-    so: monthly.so.reduce((a,b)=>a+b,0),
-    disp: monthly.disp.reduce((a,b)=>a+b,0),
-    pend: monthly.pend.reduce((a,b)=>a+b,0),
-    clsd: monthly.clsd.reduce((a,b)=>a+b,0),
-    prdn: monthly.prdn.reduce((a,b)=>a+b,0),
+    proj: final_monthly.proj.reduce((a,b)=>a+b,0),
+    so: final_monthly.so.reduce((a,b)=>a+b,0),
+    disp: final_monthly.disp.reduce((a,b)=>a+b,0),
+    pend: final_monthly.pend.reduce((a,b)=>a+b,0),
+    clsd: final_monthly.clsd.reduce((a,b)=>a+b,0),
+    prdn: final_monthly.prdn.reduce((a,b)=>a+b,0),
   };
 
-  const quarterly = {quarters:QMAP_M, proj:[0,0,0,0], so:[0,0,0,0], disp:[0,0,0,0], pend:[0,0,0,0], clsd:[0,0,0,0], prdn:[0,0,0,0]};
-  MONTHS.forEach((m,i) => {
-    const qi = ['Q1 (Apr-Jun)','Q2 (Jul-Sep)','Q3 (Oct-Dec)','Q4 (Jan-Mar)'].indexOf(QMAP_M[m]);
-    if (qi !== -1) {
-      ['proj','so','disp','pend','clsd','prdn'].forEach(k => { quarterly[k][qi] += monthly[k][i]; });
-    }
-  });
-
-  function buildDimTable(rows_p, rows_s, rows_r, dimKey_p, dimKey_s, dimKey_r) {
-    const map = {};
-    rows_p.forEach(r => {
-      const n = String(r[dimKey_p]||'').trim(); if(!n) return;
-      const m = getMMM(r,true); if(!MONTHS.includes(m)) return;
-      if(!map[n]) map[n]={proj:0,so:0,disp:0,pend:0,clsd:0,prdn:0};
-      map[n].proj += getV(r, COL_SO);
-    });
-    rows_s.forEach(r => {
-      const n = String(r[dimKey_s]||'').trim(); if(!n) return;
-      const m = getMMM(r,false); if(!MONTHS.includes(m)) return;
-      if(!map[n]) map[n]={proj:0,so:0,disp:0,pend:0,clsd:0,prdn:0};
-      map[n].so += getV(r, COL_SO);
-      map[n].disp += getV(r, COL_DISP);
-      map[n].pend += getV(r, COL_PEND);
-      map[n].clsd += getV(r, COL_CLSD);
-    });
-    rows_r.forEach(r => {
-      const n = String(r[dimKey_r]||'').trim(); if(!n) return;
-      const m = r['MMM-YY'] || getMMM(r, false);
-      if(!MONTHS.includes(m)) return;
-      if(!map[n]) map[n]={proj:0,so:0,disp:0,pend:0,clsd:0,prdn:0};
-      map[n].prdn += getV(r, COL_PRDN);
-    });
-    return Object.entries(map).map(([name,v]) => ({
-      name, ...v,
-      so_proj_pct: v.proj>0 ? +(v.so/v.proj*100).toFixed(1) : 0,
-      disp_so_pct: v.so>0 ? +(v.disp/v.so*100).toFixed(1) : 0
-    })).sort((a,b) => b.proj-a.proj);
+  const final_tables = {};
+  for (let d in dim_tables) {
+    final_tables[d] = Object.entries(dim_tables[d]).map(([name, v]) => ({
+      name, 
+      proj: v.proj||0, so: v.so||0, disp: v.disp||0, pend: v.pend||0, clsd: v.clsd||0, prdn: v.prdn||0,
+      so_proj_pct: v.proj > 0 ? +((v.so||0)/(v.proj)*100).toFixed(1) : 0,
+      disp_so_pct: v.so > 0 ? +((v.disp||0)/(v.so)*100).toFixed(1) : 0
+    })).sort((a,b) => b.proj - a.proj);
   }
 
-  const tables = {
-    'Item Parent': buildDimTable(projRows, soRows, prdnRows, 'Item Parent','Item Parent','Item Parent'),
-    'New Mis Item Group': buildDimTable(projRows, soRows, prdnRows, 'New Mis Item Group','New Mis Item Group','New Mis Item Group'),
-    'Origin': buildDimTable(projRows, soRows, prdnRows, 'Origin','Origin','Origin'),
-    'Customer Group': buildDimTable(projRows, soRows, prdnRows, 'Customer Group','Customer Group','Customer Group'),
-    'Customer': buildDimTable(projRows, soRows, prdnRows, 'Customer','Customer','Customer'),
-    'Sales Order Created By': buildDimTable(projRows, soRows, prdnRows, 'Sales Order Created By','Sales Order Created By','Sales Order Created By'),
-    'Item Type(KVI/VALUE ADDED)': buildDimTable(projRows, soRows, prdnRows, 'Item Type(KVI/VALUE ADDED)','Item Type(KVI/VALUE ADDED)','Item Type(KVI/VALUE ADDED)'),
-    'Packaging Type': buildDimTable(projRows, soRows, prdnRows, 'Packaging Type ','Packaging Type ','Packaging Type '),
-    'Packaging Method': buildDimTable(projRows, soRows, prdnRows, 'Packaging Method','Packaging Method','Packaging Method'),
-    'Item Name': buildDimTable(projRows, soRows, prdnRows, 'Item Name','Item Name','Item Name'),
-  };
-
-  const filters = {
-    'Item Parent': getOpts(projRows,soRows,'Item Parent','Item Parent'),
-    'Customer': getOpts(projRows,soRows,'Customer','Customer').slice(0,200),
-    'Customer Group': getOpts(projRows,soRows,'Customer Group','Customer Group'),
-    'Origin': getOpts(projRows,soRows,'Origin','Origin'),
-    'New Mis Item Group': getOpts(projRows,soRows,'New Mis Item Group','New Mis Item Group'),
-    'Item Type(KVI/VALUE ADDED)': getOpts(projRows,soRows,'Item Type(KVI/VALUE ADDED)','Item Type(KVI/VALUE ADDED)'),
-    'Packaging Type ': getOpts(projRows,soRows,'Packaging Type ','Packaging Type '),
-    'Packaging Method': getOpts(projRows,soRows,'Packaging Method','Packaging Method'),
-    'Sales Order Created By': getOpts(projRows,soRows,'Sales Order Created By','Sales Order Created By'),
-  };
-
-  function buildDimData(rows_p, rows_s, rows_r, dimKey_p, dimKey_s, dimKey_r) {
-    const result = {};
-    const keys = [
-      {r: rows_p, k: dimKey_p, m: r=>getMMM(r,true), f: r=>({proj:getV(r,COL_SO)})},
-      {r: rows_s, k: dimKey_s, m: r=>getMMM(r,false), f: r=>({so:getV(r,COL_SO), disp:getV(r,COL_DISP), pend:getV(r,COL_PEND), clsd:getV(r,COL_CLSD)})},
-      {r: rows_r, k: dimKey_r, m: r=>(r['MMM-YY']||getMMM(r,false)), f: r=>({prdn:getV(r,COL_SO)})}
-    ];
-    keys.forEach(conf => {
-      conf.r.forEach(r => {
-        const n = String(r[conf.k]||'').trim(); if(!n) return;
-        const m = conf.m(r); if(!MONTHS.includes(m)) return;
-        if(!result[n]) result[n] = {};
-        if(!result[n][m]) result[n][m] = {proj:0,so:0,disp:0,pend:0,clsd:0,prdn:0};
-        const vals = conf.f(r);
-        for(let key in vals) result[n][m][key] += vals[key];
-      });
-    });
-    return result;
+  const final_filters = {};
+  for (let d in filter_opts) {
+    final_filters[d] = Array.from(filter_opts[d]).sort();
+    if (d === 'Customer') final_filters[d] = final_filters[d].slice(0, 200);
   }
 
-  return { kpis, monthly, quarterly, tables, filters, dim_data };
+  return { kpis, monthly: final_monthly, tables: final_tables, filters: final_filters, dim_data };
 }
 
 // ============================================================
