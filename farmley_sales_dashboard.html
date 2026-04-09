@@ -728,11 +728,13 @@ function processExcelData(projRows, soRows, prdnRows) {
   const MONTH_MAP = {April:'Apr-25',May:'May-25',June:'Jun-25',July:'Jul-25',August:'Aug-25',September:'Sep-25',October:'Oct-25',November:'Nov-25',December:'Dec-25',January:'Jan-26',February:'Feb-26',March:'Mar-26'};
   const QMAP_M = {'Apr-25':'Q1 (Apr-Jun)','May-25':'Q1 (Apr-Jun)','Jun-25':'Q1 (Apr-Jun)','Jul-25':'Q2 (Jul-Sep)','Aug-25':'Q2 (Jul-Sep)','Sep-25':'Q2 (Jul-Sep)','Oct-25':'Q3 (Oct-Dec)','Nov-25':'Q3 (Oct-Dec)','Dec-25':'Q3 (Oct-Dec)','Jan-26':'Q4 (Jan-Mar)','Feb-26':'Q4 (Jan-Mar)','Mar-26':'Q4 (Jan-Mar)'};
 
-  const COL_SO_KEYS = ['Stock Qty In Kg', 'Stock Qty In Kgs', 'Stock Qty', 'Qty in Kg', 'Quantity'];
-  const COL_DISP_KEYS = ['Delivered KGs', 'Delivered Qty'];
-  const COL_PEND_KEYS = ['Pending KGs', 'Pending Qty'];
-  const COL_CLSD_KEYS = ['Closed KGs', 'Closed Qty'];
-  const COL_PRDN_KEYS = ['Produced Kg', 'Produced Qty', 'Production Qty', 'Stock Qty In Kg'];
+  // Mapping per user request:
+  const COL_PROG_VAL = ['Stock Qty In Kg', 'Planned Qty', 'Projected Qty'];
+  const COL_SO_VAL   = ['Stock Qty In Kg', 'Ordered Qty', 'Sales Order Master Qty'];
+  const COL_DISP_VAL = ['Delivered KGs', 'Delivered Qty'];
+  const COL_PEND_VAL = ['Pending KGs', 'Pending Qty'];
+  const COL_CLSD_VAL = ['Closed KGs', 'Closed Qty'];
+  const COL_PRDN_VAL = ['Stock Qty In Kg', 'Produced Qty', 'Produced Kg'];
 
   // Resolve consistent mapping for column names once
   function resolveCol(rows, searchKeys) {
@@ -748,12 +750,21 @@ function processExcelData(projRows, soRows, prdnRows) {
     return null;
   }
 
-  const c_p_so = resolveCol(projRows, COL_SO_KEYS);
-  const c_s_so = resolveCol(soRows, COL_SO_KEYS);
-  const c_s_disp = resolveCol(soRows, COL_DISP_KEYS);
-  const c_s_pend = resolveCol(soRows, COL_PEND_KEYS);
-  const c_s_clsd = resolveCol(soRows, COL_CLSD_KEYS);
-  const c_r_prdn = resolveCol(prdnRows, COL_PRDN_KEYS);
+  const c_p_so = resolveCol(projRows, COL_PROG_VAL);
+  const c_s_so = resolveCol(soRows, COL_SO_VAL);
+  const c_s_disp = resolveCol(soRows, COL_DISP_VAL);
+  const c_s_pend = resolveCol(soRows, COL_PEND_VAL);
+  const c_s_clsd = resolveCol(soRows, COL_CLSD_VAL);
+  const c_r_prdn = resolveCol(prdnRows, COL_PRDN_VAL);
+
+  console.log('Live Sync Columns Resolved:', {
+    proj: c_p_so,
+    so: c_s_so,
+    disp: c_s_disp,
+    pend: c_s_pend,
+    clsd: c_s_clsd,
+    prdn: c_r_prdn
+  });
 
   function getMMM(row) {
     let val = row['MMM-YY'] || row['MMM - YY'];
@@ -788,14 +799,6 @@ function processExcelData(projRows, soRows, prdnRows) {
     filter_opts[d] = new Set();
   });
 
-  function ensurePath(obj, d, name, m) {
-    if (!obj[d]) obj[d] = {};
-    if (!obj[d][name]) obj[d][name] = {};
-    if (m && !obj[d][name][m]) obj[d][name][m] = { proj: 0, so: 0, disp: 0, pend: 0, clsd: 0, prdn: 0 };
-    return obj[d][name];
-  }
-
-  // 1. Process PROJECTION rows
   projRows.forEach(r => {
     const m = getMMM(r);
     if (!MONTHS.includes(m)) return;
@@ -812,7 +815,6 @@ function processExcelData(projRows, soRows, prdnRows) {
     });
   });
 
-  // 2. Process SO and DISPATCH rows
   soRows.forEach(r => {
     const m = getMMM(r);
     if (!MONTHS.includes(m)) return;
@@ -838,7 +840,6 @@ function processExcelData(projRows, soRows, prdnRows) {
     });
   });
 
-  // 3. Process PRODUCTION rows
   prdnRows.forEach(r => {
     const m = r['MMM-YY'] || getMMM(r);
     if (!MONTHS.includes(m)) return;
@@ -854,7 +855,6 @@ function processExcelData(projRows, soRows, prdnRows) {
     });
   });
 
-  // Final transformation
   const final_monthly = { months: MONTHS, proj: [], so: [], disp: [], pend: [], clsd: [], prdn: [] };
   MONTHS.forEach(m => {
     final_monthly.proj.push(Math.round(monthly.proj[m] || 0));
@@ -930,21 +930,52 @@ function initLiveSync() {
     };
     
     es.addEventListener('update', async (e) => {
-      console.log('Update received:', e.data);
+      console.log('Live Update Received. Fetching latest data...');
       try {
-        const response = await fetch('http://localhost:8080/latest?' + new Date().getTime());
+        const response = await fetch('/latest?t=' + Date.now());
         const blob = await response.blob();
         const reader = new FileReader();
         reader.onload = (e) => {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          
-          processExcelData(workbook);
-          renderAll();
-          
-          // Show a brief success pulse
-          statusDot.style.transform = 'scale(1.5)';
-          setTimeout(() => statusDot.style.transform = 'scale(1)', 300);
+          try {
+            const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+            const sheetNames = wb.SheetNames;
+            console.log('Live Sync: Available Sheets:', sheetNames);
+            
+            const projSheet = sheetNames.find(s => s === 'Projection' || s === 'PROJECTION');
+            const soSheet = sheetNames.find(s => s === 'SO and dispatch' || s.toLowerCase().includes('dispatch'));
+            const prdnSheet = sheetNames.find(s => s === 'Prdn' || s === 'PRODUCTION');
+
+            const finalProj = projSheet || sheetNames.find(s => s.toLowerCase().includes('proj'));
+            const finalSo = soSheet || sheetNames.find(s => s.toLowerCase().includes('so'));
+            const finalPrdn = prdnSheet || sheetNames.find(s => s.toLowerCase().includes('prdn'));
+
+            if (!finalProj || !finalSo || !finalPrdn) {
+              console.error('Live Sync: Missing Sheets:', { proj: !!finalProj, so: !!finalSo, prdn: !!finalPrdn });
+              return;
+            }
+
+            console.log(`Live Sync: Parsing sheets: [${finalProj}], [${finalSo}], [${finalPrdn}]`);
+            
+            const projData = XLSX.utils.sheet_to_json(wb.Sheets[finalProj]);
+            const soData = XLSX.utils.sheet_to_json(wb.Sheets[finalSo]);
+            const prdnData = XLSX.utils.sheet_to_json(wb.Sheets[finalPrdn]);
+
+            console.log(`Live Sync: Rows fetched: Proj=${projData.length}, SO=${soData.length}, Prdn=${prdnData.length}`);
+
+            const newData = processExcelData(projData, soData, prdnData);
+            
+            DATA = newData;
+            console.log('Live Sync: Global DATA updated. Re-rendering dashboard...');
+            
+            buildFilters();
+            renderAll();
+            
+            statusDot.style.transform = 'scale(1.5)';
+            setTimeout(() => statusDot.style.transform = 'scale(1)', 300);
+            console.log('Live Sync: Dashboard updated with ' + (projData.length + soData.length + prdnData.length) + ' records.');
+          } catch (err) {
+            console.error('Live Sync: Error processing workbook:', err);
+          }
         };
         reader.readAsArrayBuffer(blob);
       } catch (err) {

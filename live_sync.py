@@ -19,23 +19,39 @@ POLL_INTERVAL = 1.0  # Seconds
 clients = []
 last_mtime = 0
 
-def get_current_mtime():
+def get_file_info():
     try:
-        return os.path.getmtime(FILENAME)
+        stat = os.stat(FILENAME)
+        return stat.st_mtime, stat.st_size
     except OSError:
-        return 0
+        return 0, 0
 
 def watch_file():
     global last_mtime
-    last_mtime = get_current_mtime()
+    last_mtime, last_size = get_file_info()
     print(f"[*] Watching for changes in: {FILENAME}")
     
     while True:
         time.sleep(POLL_INTERVAL)
-        current_mtime = get_current_mtime()
-        if current_mtime > last_mtime:
-            print(f"[!] Change detected in {FILENAME}")
-            last_mtime = current_mtime
+        curr_mtime, curr_size = get_file_info()
+        
+        if curr_mtime > last_mtime or curr_size != last_size:
+            print(f"[!] Change detected. Waiting for file to stabilize...")
+            
+            # Wait for file to stop changing (essential for large 80MB files)
+            stable_count = 0
+            while stable_count < 3:
+                time.sleep(1.0)
+                check_mtime, check_size = get_file_info()
+                if check_mtime == curr_mtime and check_size == curr_size:
+                    stable_count += 1
+                else:
+                    curr_mtime, curr_size = check_mtime, check_size
+                    stable_count = 0
+            
+            print(f"[*] File stabilized. Notifying dashboard...")
+            last_mtime = curr_mtime
+            last_size = curr_size
             notify_clients()
 
 def notify_clients():
@@ -64,6 +80,16 @@ class SSEHandler:
             raise Exception("Client disconnected")
 
 class DashboardHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, format, *args):
+        # Only log successful updates or detections, keep the rest quiet
+        if "GET /latest" in args[0]:
+            print(f"[*] Dashboard updated successfully.")
+        elif "GET /events" in args[0]:
+            pass # Keep connection logs quiet
+        else:
+            # super().log_message(format, *args)
+            pass
+
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -76,52 +102,73 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self):
-        if self.path == '/events':
+        # Normalize path for matching
+        clean_path = self.path.split('?')[0].rstrip('/')
+        
+        if clean_path == '/events':
             self.handle_sse()
-        elif self.path.startswith('/latest'):
+        elif clean_path == '/latest':
             self.handle_latest()
         else:
+            # Serve static files as usual
             super().do_GET()
 
     def handle_sse(self):
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/event-stream')
-        self.send_header('Cache-Control', 'no-cache')
-        self.send_header('Connection', 'keep-alive')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-        
-        sse = SSEHandler(self)
-        clients.append(sse)
-        print(f"[+] Dashboard connected. Active clients: {len(clients)}")
-        
-        # Keep connection open
-        while True:
-            try:
-                # Send keep-alive every 30 seconds
+        try:
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Connection', 'keep-alive')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            sse = SSEHandler(self)
+            clients.append(sse)
+            print(f"[+] Dashboard connected.")
+            
+            # Keep connection open
+            while True:
+                # Send keep-alive every 30 seconds to prevent timeout
                 time.sleep(30)
                 sse.send_event("ping", "keep-alive")
-            except:
-                print(f"[-] Dashboard disconnected. Active clients: {len(clients)-1}")
-                break
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass # Normal disconnection
+        except Exception as e:
+            pass
+        finally:
+            if 'sse' in locals() and sse in clients:
+                clients.remove(sse)
+            print(f"[-] Dashboard disconnected.")
 
     def handle_latest(self):
         if not os.path.exists(FILENAME):
             self.send_error(404, "File not found")
             return
             
-        with open(FILENAME, 'rb') as f:
-            content = f.read()
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            self.send_header('Content-Length', len(content))
-            self.end_headers()
-            self.wfile.write(content)
+        try:
+            with open(FILENAME, 'rb') as f:
+                content = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                self.send_header('Content-Length', str(len(content)))
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(content)
+        except:
+            pass
+
+class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+    
+    def handle_error(self, request, client_address):
+        # Suppress the scary tracebacks for normal browser disconnections
+        pass
 
 def run_server():
-    with socketserver.TCPServer(("", PORT), DashboardHandler) as httpd:
-        print(f"[*] Server running at http://localhost:{PORT}")
-        print(f"[*] Dashboard URL: http://localhost:{PORT}/index.html")
+    with ThreadingTCPServer(("", PORT), DashboardHandler) as httpd:
+        print(f"[*] Live Sync Server Active on http://localhost:{PORT}")
+        print(f"[*] Watching: {FILENAME}")
         # Automatically open the dashboard
         webbrowser.open(f"http://localhost:{PORT}/index.html")
         httpd.serve_forever()
