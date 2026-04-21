@@ -213,9 +213,9 @@
     <div class="topbar">
       <div class="topbar-left">
         <div class="status-dot"></div>
-        <span class="status-text">Live Server Connected</span>
-        <span class="records-badge" id="records-badge">— records</span>
-        <span class="unit-badge">Qty</span>
+        <span class="status-text">Live Server: Connecting...</span>
+        <span class="records-badge" id="records-badge">Syncing...</span>
+        <span class="unit-badge">Metric: Kg/Qty</span>
       </div>
       <input class="search-box" type="text" placeholder="Search items..." id="table-search" oninput="renderTable()">
     </div>
@@ -306,6 +306,7 @@ const FILTER_DIMS = [
 let DATA = EMBEDDED_DATA;
 let activeFilters = {};
 let activeMetrics = new Set(METRICS.map(m=>m.key));
+let selectedMonths = new Set(MONTH_ORDER);  // Month filter: all selected by default
 let activeDim = 'Item Parent';
 let sortCol = 'proj'; sortAsc = false;
 let monthlyChart = null, quarterlyChart = null;
@@ -332,6 +333,58 @@ function fmtPct(v) { if (!v && v!==0) return '—'; return v.toFixed(1)+'%'; }
 function buildFilters() {
   const container = document.getElementById('filter-container');
   container.innerHTML = '';
+
+  // ── MONTH FILTER (MMM-YY) ──
+  {
+    const group = document.createElement('div');
+    group.className = 'filter-group';
+    group.id = 'month-filter-group';
+    const lbl = document.createElement('div');
+    lbl.className = 'filter-label';
+    lbl.innerHTML = `<span>📅 Month (MMM-YY)</span><span class="arrow">▾</span>`;
+    lbl.onclick = () => { optsDiv.classList.toggle('open'); lbl.classList.toggle('open'); };
+    const optsDiv = document.createElement('div');
+    optsDiv.className = 'filter-opts';
+    optsDiv.id = 'month-filter-opts';
+
+    // Select All
+    const allLabel = document.createElement('label');
+    allLabel.className = 'filter-opt';
+    allLabel.style.fontWeight = '700';
+    allLabel.style.borderBottom = '1px solid var(--border)';
+    allLabel.style.marginBottom = '2px';
+    allLabel.style.paddingBottom = '6px';
+    allLabel.style.color = 'var(--proj)';
+    allLabel.innerHTML = `<input type="checkbox" checked class="month-select-all"> Select All`;
+    allLabel.querySelector('input').addEventListener('change', (e) => {
+      const checked = e.target.checked;
+      optsDiv.querySelectorAll('input[type=checkbox]:not(.month-select-all)').forEach(cb => {
+        cb.checked = checked;
+      });
+      applyMonthFilter();
+    });
+    optsDiv.appendChild(allLabel);
+
+    MONTH_ORDER.forEach(m => {
+      const item = document.createElement('label');
+      item.className = 'filter-opt';
+      item.innerHTML = `<input type="checkbox" checked value="${m}" class="month-cb"> ${m}`;
+      item.querySelector('input').addEventListener('change', (e) => {
+        const allCb = optsDiv.querySelector('.month-select-all');
+        const others = optsDiv.querySelectorAll('.month-cb');
+        const allChecked = Array.from(others).every(c => c.checked);
+        const noneChecked = Array.from(others).every(c => !c.checked);
+        allCb.checked = allChecked;
+        allCb.indeterminate = !allChecked && !noneChecked;
+        applyMonthFilter();
+      });
+      optsDiv.appendChild(item);
+    });
+    group.appendChild(lbl);
+    group.appendChild(optsDiv);
+    container.appendChild(group);
+  }
+
   FILTER_DIMS.forEach(({key, label}) => {
     const opts = DATA.filters[key] || [];
     const group = document.createElement('div');
@@ -400,68 +453,62 @@ function resetFilters() {
     cb.indeterminate = false;
   });
   activeFilters = {};
+  selectedMonths = new Set(MONTH_ORDER);
   renderAll();
 }
 
-function isFiltered() { return Object.keys(activeFilters).length > 0; }
+function applyMonthFilter() {
+  selectedMonths = new Set();
+  document.querySelectorAll('.month-cb').forEach(cb => {
+    if (cb.checked) selectedMonths.add(cb.value);
+  });
+  if (selectedMonths.size === 0) selectedMonths = new Set(MONTH_ORDER); // fallback: show all
+  renderAll();
+}
+
+function isFiltered() { return Object.keys(activeFilters).length > 0 || selectedMonths.size < MONTH_ORDER.length; }
 
 // ============================================================
 // COMPUTE FILTERED DATA
 // ============================================================
 function getFilteredData() {
-  if (!isFiltered()) return DATA;
-  // Recompute by filtering dim_data
+  const monthFiltered = selectedMonths.size < MONTH_ORDER.length;
+  const dimFiltered = Object.keys(activeFilters).length > 0;
+  if (!monthFiltered && !dimFiltered) return DATA;
+
   const dd = DATA.dim_data;
-  const months = MONTH_ORDER;
+  const filteredMonths = monthFiltered ? MONTH_ORDER.filter(m => selectedMonths.has(m)) : MONTH_ORDER;
 
-  // For each active filter dim, collect allowed values
-  const allowed = {};
-  FILTER_DIMS.forEach(({key, label}) => {
-    const fk = key.trim();
-    const dimKey = label === 'Item Parent' ? 'Item Parent' :
-                   label === 'Customer' ? 'Customer' :
-                   label === 'Customer Group' ? 'Customer Group' :
-                   label === 'Origin' ? 'Origin' :
-                   label === 'New Mis Item Group' ? 'New Mis Item Group' :
-                   label === 'Item Type (KVI/VA)' ? 'Item Type' :
-                   label === 'Packaging Type' ? 'Packaging Type' :
-                   label === 'Packaging Method' ? 'Packaging Method' :
-                   label === 'Sales Order Created By' ? 'Sales Order Created By' : label;
-    if (activeFilters[key]) {
-      // excluded values
-      allowed[dimKey] = activeFilters[key]; // these are EXCLUDED
-    }
-  });
-
-  // For each filter being applied, we sum over the dim_data but exclude certain values
-  // Strategy: find the first active filter and use its dim to compute monthly sums
-  // If multiple filters active, use the most restrictive approach: sum only matching rows
-  // Since dim_data is per-dimension, multi-dim filtering is approximate via intersection
-
-  // Simple approach: use the primary filter dim that has the most exclusions
+  // Determine primary dim filter
   const activeDims = Object.keys(activeFilters);
-  if (activeDims.length === 0) return DATA;
-
-  // Use first active dim
-  const primaryFiltKey = activeDims[0];
-  const primaryLabel = FILTER_DIMS.find(d => d.key === primaryFiltKey)?.label || '';
-  const dimKey = primaryLabel === 'Item Parent' ? 'Item Parent' :
-                 primaryLabel === 'Customer' ? 'Customer' :
-                 primaryLabel === 'Customer Group' ? 'Customer Group' :
-                 primaryLabel === 'Origin' ? 'Origin' :
-                 primaryLabel === 'New Mis Item Group' ? 'New Mis Item Group' :
-                 primaryLabel === 'Item Type (KVI/VA)' ? 'Item Type' :
-                 primaryLabel === 'Packaging Type' ? 'Packaging Type' :
-                 primaryLabel === 'Packaging Method' ? 'Packaging Method' :
-                 primaryLabel === 'Sales Order Created By' ? 'Sales Order Created By' : primaryLabel;
+  let dimKey = 'Item Parent'; // default
+  let excluded = null;
+  if (activeDims.length > 0) {
+    const primaryFiltKey = activeDims[0];
+    const primaryLabel = FILTER_DIMS.find(d => d.key === primaryFiltKey)?.label || '';
+    dimKey = primaryLabel === 'Item Parent' ? 'Item Parent' :
+             primaryLabel === 'Customer' ? 'Customer' :
+             primaryLabel === 'Customer Group' ? 'Customer Group' :
+             primaryLabel === 'Origin' ? 'Origin' :
+             primaryLabel === 'New Mis Item Group' ? 'New Mis Item Group' :
+             primaryLabel === 'Item Type (KVI/VA)' ? 'Item Type' :
+             primaryLabel === 'Packaging Type' ? 'Packaging Type' :
+             primaryLabel === 'Packaging Method' ? 'Packaging Method' :
+             primaryLabel === 'Sales Order Created By' ? 'Sales Order Created By' : primaryLabel;
+    excluded = activeFilters[primaryFiltKey];
+  }
 
   const dimDD = dd[dimKey];
   if (!dimDD) return DATA;
-  const excluded = activeFilters[primaryFiltKey];
 
-  // Sum monthly data excluding excluded values
+  // Sum monthly data excluding excluded values AND respecting month filter
   const monthly = { months: MONTH_ORDER, proj:[], so:[], disp:[], pend:[], clsd:[], prdn:[] };
   MONTH_ORDER.forEach(m => {
+    if (!selectedMonths.has(m)) {
+      monthly.proj.push(0); monthly.so.push(0); monthly.disp.push(0);
+      monthly.pend.push(0); monthly.clsd.push(0); monthly.prdn.push(0);
+      return;
+    }
     let p=0,s=0,d=0,pnd=0,c=0,r=0;
     Object.entries(dimDD).forEach(([name, mdata]) => {
       if (excluded && excluded.has(name)) return;
@@ -494,29 +541,28 @@ function getFilteredData() {
     prdn: monthly.prdn.reduce((a,b)=>a+b,0),
   };
 
-  // Recompute table for active dim using filtered values from dim_data
+  // Recompute tables for ALL dims using month filter
   const tables = {};
-  const tDimKey = dimKey;
-  const tDD = dd[tDimKey];
-  if (tDD) {
+  for (const [dk, dimData] of Object.entries(dd)) {
     const rows = [];
-    Object.entries(tDD).forEach(([name, mdata]) => {
-      if (excluded && excluded.has(name)) return;
+    Object.entries(dimData).forEach(([name, mdata]) => {
+      if (dk === dimKey && excluded && excluded.has(name)) return;
       let p=0,s=0,d=0,pnd=0,c=0,r=0;
-      MONTH_ORDER.forEach(m => {
+      filteredMonths.forEach(m => {
         const md = mdata[m] || {};
         p += md.proj||0; s += md.so||0; d += md.disp||0; pnd += md.pend||0; c += md.clsd||0; r += md.prdn||0;
       });
+      if (p === 0 && s === 0 && d === 0 && pnd === 0 && c === 0 && r === 0) return; // skip empty
       rows.push({name, proj:p, so:s, disp:d, pend:pnd, clsd:c, prdn:r,
         so_proj_pct: p>0 ? +(s/p*100).toFixed(1) : 0,
         disp_so_pct: s>0 ? +(d/s*100).toFixed(1) : 0
       });
     });
     rows.sort((a,b) => b.proj - a.proj);
-    tables[dimKey] = rows;
+    tables[dk] = rows;
   }
 
-  return { ...DATA, kpis, monthly, quarterly: qdata, tables: {...DATA.tables, ...tables} };
+  return { ...DATA, kpis, monthly, quarterly: qdata, tables };
 }
 
 // ============================================================
@@ -692,12 +738,14 @@ function renderTable() {
 }
 
 function getSparkline(name, metricKey) {
-  // Get monthly data for this name from dim_data
-  const dimKey = activeDim === 'Item Type(KVI/VALUE ADDED)' ? 'Item Type' :
-                 activeDim === 'Packaging Type ' ? 'Packaging Type' : activeDim;
+  // Get monthly data for this name from dim_data, respecting month filter
+  const dimKey = activeDim;
   const dd = DATA.dim_data[dimKey];
   if (!dd || !dd[name]) return MONTH_ORDER.map(()=>0);
-  return MONTH_ORDER.map(m => (dd[name][m] || {})[metricKey] || 0);
+  return MONTH_ORDER.map(m => {
+    if (!selectedMonths.has(m)) return 0;
+    return (dd[name][m] || {})[metricKey] || 0;
+  });
 }
 
 function setSort(col) {
@@ -741,6 +789,7 @@ function handleExcelUpload(event) {
         const newData = processExcelData(projData, soData, prdnData);
         DATA = newData;
         activeFilters = {};
+        selectedMonths = new Set(MONTH_ORDER);
         buildFilters();
         renderAll();
         document.getElementById('loading').classList.add('hidden');
@@ -967,59 +1016,65 @@ function initLiveSync() {
       es.close();
       setTimeout(connect, 5000);
     };
+
+    es.addEventListener('processing', (e) => {
+      statusDot.style.background = '#F59E0B'; // Orange
+      statusText.innerText = e.data || 'Live Sync: Processing...';
+    });
+
+    es.addEventListener('progress', (e) => {
+      statusDot.style.background = '#F59E0B';
+      statusText.innerText = 'Live Sync: ' + e.data;
+    });
     
     es.addEventListener('update', async (e) => {
-      console.log('Live Update Received. Fetching latest data...');
-      try {
-        const response = await fetch('/latest?t=' + Date.now());
-        const blob = await response.blob();
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
-            const sheetNames = wb.SheetNames;
-            
-            const projSheet = sheetNames.find(s => s === 'Projection' || s === 'PROJECTION');
-            const soSheet = sheetNames.find(s => s === 'SO and dispatch' || s.toLowerCase().includes('dispatch'));
-            const prdnSheet = sheetNames.find(s => s === 'Prdn' || s === 'PRODUCTION');
-
-            const finalProj = projSheet || sheetNames.find(s => s.toLowerCase().includes('proj'));
-            const finalSo = soSheet || sheetNames.find(s => s.toLowerCase().includes('so'));
-            const finalPrdn = prdnSheet || sheetNames.find(s => s.toLowerCase().includes('prdn'));
-
-            if (!finalProj || !finalSo || !finalPrdn) return;
-
-             const projData = XLSX.utils.sheet_to_json(wb.Sheets[finalProj]);
-            const soData = XLSX.utils.sheet_to_json(wb.Sheets[finalSo]);
-            const prdnData = XLSX.utils.sheet_to_json(wb.Sheets[finalPrdn]);
-            console.log(`Live Sync: Rows fetched: Proj=${projData.length}, SO=${soData.length}, Prdn=${prdnData.length}`);
-
-            const newData = processExcelData(projData, soData, prdnData);
-            
-            // Critical: Update global DATA and re-render
-            DATA = newData;
-            activeFilters = {}; // Reset filters on data update to prevent inconsistencies
-            console.log('Live Sync: Global DATA updated. Re-rendering dashboard...');
-            
-            buildFilters();
-            renderAll();
-            
-            // Update record count badge
-            const totalRecs = projData.length + soData.length + prdnData.length;
-            const badge = document.getElementById('records-badge');
-            if (badge) badge.innerText = totalRecs.toLocaleString() + ' records';
-            
-            statusDot.style.transform = 'scale(1.5)';
-            setTimeout(() => statusDot.style.transform = 'scale(1)', 300);
-            console.log('Live Sync: Dashboard updated with ' + totalRecs + ' records.');
-          } catch (err) {
-            console.error('Live Sync: Error processing workbook:', err);
+      console.log('Live Update Received. Fetching pre-processed JSON...');
+      
+      const fetchLatest = async (retryCount = 0) => {
+        try {
+          const response = await fetch('/latest?t=' + Date.now());
+          const newData = await response.json();
+          
+          if (newData.status === 'processing') {
+              const waitTime = 5;
+              statusDot.style.background = '#F59E0B';
+              statusText.innerText = `Sync: Busy... (Retry in ${waitTime}s)`;
+              setTimeout(() => fetchLatest(retryCount + 1), waitTime * 1000);
+              return;
           }
-        };
-        reader.readAsArrayBuffer(blob);
-      } catch (err) {
-        console.error('Live Sync: Error fetching latest file:', err);
-      }
+
+          DATA = newData;
+          activeFilters = {};
+          selectedMonths = new Set(MONTH_ORDER); 
+          console.log('Live Sync: Global DATA updated. Re-rendering...');
+          
+          buildFilters();
+          renderAll();
+          
+          const loader = document.getElementById('loading');
+          if (loader) loader.classList.add('hidden');
+          
+          const badge = document.getElementById('records-badge');
+          if (badge) badge.innerText = 'Active (JSON Sync)';
+          
+          statusDot.style.background = '#10B981';
+          statusText.innerText = 'Live Excel Sync: Updated';
+          setTimeout(() => {
+              statusText.innerText = 'Live Excel Sync: Active';
+          }, 2000);
+        } catch (err) {
+          console.error('Live Sync: Error fetching JSON:', err);
+          statusText.innerText = 'Live Sync: Connection Reset';
+          setTimeout(() => fetchLatest(retryCount + 1), 5000);
+        }
+      };
+
+      fetchLatest();
+    });
+
+    es.addEventListener('error_msg', (e) => {
+        statusText.innerText = 'Live Sync: ' + e.data;
+        statusDot.style.background = '#EF4444';
     });
   };
   
