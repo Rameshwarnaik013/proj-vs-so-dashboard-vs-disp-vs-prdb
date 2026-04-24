@@ -20,7 +20,8 @@ def process_excel_data(file_path, progress_callback=None):
     DIMENSIONS = [
         'Item Parent', 'Customer', 'Customer Group', 'Origin', 
         'New Mis Item Group', 'Item Type(KVI/VALUE ADDED)', 
-        'Packaging Type ', 'Packaging Method', 'Sales Order Created By'
+        'Packaging Type ', 'Packaging Method', 'Sales Order Created By',
+        'Item Name'
     ]
 
     # Structure to hold the aggregates
@@ -199,4 +200,27 @@ def process_excel_data(file_path, progress_callback=None):
 
 if __name__ == "__main__":
     FILE = r"c:\Users\Admin\OneDrive - https farmley.com\Desktop\FINAL_01\Projection vs so vs disp vs prdn dashboard.xlsx"
-    process_excel_data(FILE)
+    result = process_excel_data(FILE)
+    if result:
+        html_path = r"c:\Users\Admin\OneDrive - https farmley.com\Desktop\FINAL_01\index.html"
+        with open(html_path, 'r', encoding='utf-8') as f:
+            html = f.read()
+        # Find and replace the EMBEDDED_DATA line using string operations (regex fails on backslash escapes in JSON)
+        marker = 'const EMBEDDED_DATA = '
+        start_idx = html.index(marker)
+        # Find the matching closing ";", scanning for the end of the JSON object
+        brace_count = 0
+        i = html.index('{', start_idx)
+        while i < len(html):
+            if html[i] == '{': brace_count += 1
+            elif html[i] == '}': brace_count -= 1
+            if brace_count == 0:
+                end_idx = html.index(';', i) + 1
+                break
+            i += 1
+        json_str = json.dumps(result, separators=(',', ': '))
+        new_line = f'const EMBEDDED_DATA = {json_str};'
+        html = html[:start_idx] + new_line + html[end_idx:]
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html)
+        print(f"[*] Patched index.html with fresh data ({len(json_str)//1024} KB)")
