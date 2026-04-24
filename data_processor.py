@@ -98,7 +98,7 @@ def process_excel_data(file_path, progress_callback=None):
                     if val_name == 'Jar Sealing - WAD Machine': val_name = 'Jar Sealing - WAD Machine/Table'
 
                     if val_name not in dim_data[dim]:
-                        dim_data[dim][val_name] = { m: { 'proj':0,'so':0,'disp':0,'pend':0,'clsd':0,'prdn':0 } for m in MONTHS }
+                        dim_data[dim][val_name] = { m: { 'proj':0,'so':0,'disp':0,'pend':0,'clsd':0,'prdn':0, 'proj_qty':0,'so_qty':0,'disp_qty':0,'pend_qty':0,'clsd_qty':0,'prdn_qty':0 } for m in MONTHS }
                     
                     target_month = dim_data[dim][val_name][date_val]
                     for m_idx, m_target in metric_map.items():
@@ -109,50 +109,55 @@ def process_excel_data(file_path, progress_callback=None):
                             except: pass
 
         # Load each sheet
-        parse_sheet(proj_sheet_name, {'Stock Qty In Kg':'proj'})
-        parse_sheet(so_sheet_name, {'Stock Qty In Kg':'so', 'Delivered Qty':'disp', 'Pending KGs':'pend', 'Closed KGs':'clsd'})
-        parse_sheet(prdn_sheet_name, {'Stock Qty In Kg':'prdn'})
+        # Kg-based metrics
+        parse_sheet(proj_sheet_name, {'Stock Qty In Kg':'proj', 'Projection Units':'proj_qty'})
+        parse_sheet(so_sheet_name, {'Stock Qty In Kg':'so', 'Qty':'so_qty', 'Delivered KGs':'disp', 'Delivered Qty':'disp_qty', 'Pending KGs':'pend', 'Closed KGs':'clsd'})
+        parse_sheet(prdn_sheet_name, {'Stock Qty In Kg':'prdn', 'Qty':'prdn_qty'})
+
+        # Derive pending_qty and closed_qty from so_qty and disp_qty
+        for dim in DIMENSIONS:
+            for val_name, months_data in dim_data[dim].items():
+                for m in MONTHS:
+                    md = months_data[m]
+                    # Pending Qty = SO Qty - Dispatched Qty (clamped to 0)
+                    md['pend_qty'] = max(0, md['so_qty'] - md['disp_qty'])
+                    # Closed Qty = SO Qty - Dispatched Qty - Pending Qty (or derive similarly to KGs ratio)
+                    # Use same ratio as KGs: if so > 0, clsd_qty = clsd / so * so_qty
+                    if md['so'] > 0 and md['clsd'] > 0:
+                        md['clsd_qty'] = round(md['clsd'] / md['so'] * md['so_qty'], 2)
+                    else:
+                        md['clsd_qty'] = 0
 
         wb.close()
 
         # --- Aggregation logic ---
         log("[*] Finalizing calculations...")
         
-        monthly = { 'months': MONTHS, 'proj': [], 'so': [], 'disp': [], 'pend': [], 'clsd': [], 'prdn': [] }
+        ALL_KEYS = ['proj', 'so', 'disp', 'pend', 'clsd', 'prdn', 'proj_qty', 'so_qty', 'disp_qty', 'pend_qty', 'clsd_qty', 'prdn_qty']
+        monthly = { 'months': MONTHS }
+        for k in ALL_KEYS:
+            monthly[k] = []
+        
         for m in MONTHS:
             dim0 = DIMENSIONS[0]
-            p = sum(v[m]['proj'] for v in dim_data[dim0].values())
-            s = sum(v[m]['so'] for v in dim_data[dim0].values())
-            d = sum(v[m]['disp'] for v in dim_data[dim0].values())
-            pnd = sum(v[m]['pend'] for v in dim_data[dim0].values())
-            c = sum(v[m]['clsd'] for v in dim_data[dim0].values())
-            r = sum(v[m]['prdn'] for v in dim_data[dim0].values())
-            
-            monthly['proj'].append(round(p, 2))
-            monthly['so'].append(round(s, 2))
-            monthly['disp'].append(round(d, 2))
-            monthly['pend'].append(round(pnd, 2))
-            monthly['clsd'].append(round(c, 2))
-            monthly['prdn'].append(round(r, 2))
+            for k in ALL_KEYS:
+                val = sum(v[m][k] for v in dim_data[dim0].values())
+                monthly[k].append(round(val, 2))
 
-        kpis = { k: sum(monthly[k]) for k in ['proj', 'so', 'disp', 'pend', 'clsd', 'prdn'] }
+        kpis = { k: sum(monthly[k]) for k in ALL_KEYS }
 
         tables = {}
         for d in DIMENSIONS:
             rows = []
             for name, months_data in dim_data[d].items():
-                tp = sum(mdata['proj'] for mdata in months_data.values())
-                ts = sum(mdata['so'] for mdata in months_data.values())
-                td = sum(mdata['disp'] for mdata in months_data.values())
-                tpnd = sum(mdata['pend'] for mdata in months_data.values())
-                tc = sum(mdata['clsd'] for mdata in months_data.values())
-                tr = sum(mdata['prdn'] for mdata in months_data.values())
-                
-                rows.append({
-                    'name': name, 'proj': tp, 'so': ts, 'disp': td, 'pend': tpnd, 'clsd': tc, 'prdn': tr,
-                    'so_proj_pct': round((ts/tp*100), 1) if tp > 0 else 0,
-                    'disp_so_pct': round((td/ts*100), 1) if ts > 0 else 0
-                })
+                row = {'name': name}
+                for k in ALL_KEYS:
+                    row[k] = sum(mdata[k] for mdata in months_data.values())
+                row['so_proj_pct'] = round((row['so']/row['proj']*100), 1) if row['proj'] > 0 else 0
+                row['disp_so_pct'] = round((row['disp']/row['so']*100), 1) if row['so'] > 0 else 0
+                row['so_proj_pct_qty'] = round((row['so_qty']/row['proj_qty']*100), 1) if row['proj_qty'] > 0 else 0
+                row['disp_so_pct_qty'] = round((row['disp_qty']/row['so_qty']*100), 1) if row['so_qty'] > 0 else 0
+                rows.append(row)
             tables[d] = sorted(rows, key=lambda x: x['proj'], reverse=True)
 
         filters = { d: sorted(list(dim_data[d].keys())) for d in DIMENSIONS }
@@ -164,11 +169,13 @@ def process_excel_data(file_path, progress_callback=None):
             'Oct-25':2, 'Nov-25':2, 'Dec-25':2,
             'Jan-26':3, 'Feb-26':3, 'Mar-26':3
         }
-        quarterly = { 'quarters': QTR_ORDER, 'proj': [0]*4, 'so': [0]*4, 'disp': [0]*4, 'pend': [0]*4, 'clsd': [0]*4, 'prdn': [0]*4 }
+        quarterly = { 'quarters': QTR_ORDER }
+        for k in ALL_KEYS:
+            quarterly[k] = [0]*4
         for m in MONTHS:
             idx = QMAP_M[m]
             m_idx = MONTHS.index(m)
-            for k in ['proj', 'so', 'disp', 'pend', 'clsd', 'prdn']:
+            for k in ALL_KEYS:
                 quarterly[k][idx] += monthly[k][m_idx]
 
         final_data = {
