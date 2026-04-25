@@ -309,7 +309,7 @@ const METRICS = [
 const DIM_LABELS = {
   'Item Parent':'Item Parent','New Mis Item Group':'New Mis Item Group','Origin':'Origin',
   'Customer Group':'Customer Group','Customer':'Customer','Sales Order Created By':'Sales Order Created By',
-  'Item Type(KVI/VALUE ADDED)':'Item Type','Packaging Type':'Packaging Type','Packaging Method':'Packaging Method',
+  'Item Type(KVI/VALUE ADDED)':'Item Type','Packaging Type ':'Packaging Type','Packaging Method':'Packaging Method',
   'Item Name':'Item Name'
 };
 const FILTER_DIMS = [
@@ -469,10 +469,10 @@ function buildFilters() {
     opts.forEach(opt => {
       const item = document.createElement('label');
       item.className = 'filter-opt';
-      item.innerHTML = `<input type="checkbox" checked value="${opt}" data-dim="${key}"> ${opt}`;
+      item.innerHTML = `<input type="checkbox" checked value="${opt}" data-dim="${key}" class="dim-filter-cb"> ${opt}`;
       item.querySelector('input').addEventListener('change', (e) => {
         const allCb = optsDiv.querySelector('.select-all');
-        const others = optsDiv.querySelectorAll('input[type=checkbox]:not(.select-all)');
+        const others = optsDiv.querySelectorAll('.dim-filter-cb');
         const allChecked = Array.from(others).every(c => c.checked);
         const noneChecked = Array.from(others).every(c => !c.checked);
         allCb.checked = allChecked;
@@ -489,11 +489,14 @@ function buildFilters() {
 
 function applyFilters() {
   activeFilters = {};
-  document.querySelectorAll('.filter-opts input[type=checkbox]').forEach(cb => {
+  // Only look at actual dimension filters (not Select All, not Months)
+  document.querySelectorAll('.dim-filter-cb').forEach(cb => {
     if (!cb.checked) {
       const dim = cb.dataset.dim;
-      if (!activeFilters[dim]) activeFilters[dim] = new Set();
-      activeFilters[dim].add(cb.value);
+      if (dim) {
+        if (!activeFilters[dim]) activeFilters[dim] = new Set();
+        activeFilters[dim].add(cb.value);
+      }
     }
   });
   renderAll();
@@ -531,23 +534,13 @@ function getFilteredData() {
   const dd = DATA.dim_data;
   const filteredMonths = monthFiltered ? MONTH_ORDER.filter(m => selectedMonths.has(m)) : MONTH_ORDER;
 
-  // Determine primary dim filter
-  const activeDims = Object.keys(activeFilters);
+  // Determine primary dim filter — use the filter key directly since it matches dim_data keys
+  const activeDims = Object.keys(activeFilters).filter(d => d !== 'undefined');
   let dimKey = 'Item Parent'; // default
   let excluded = null;
   if (activeDims.length > 0) {
-    const primaryFiltKey = activeDims[0];
-    const primaryLabel = FILTER_DIMS.find(d => d.key === primaryFiltKey)?.label || '';
-    dimKey = primaryLabel === 'Item Parent' ? 'Item Parent' :
-             primaryLabel === 'Customer' ? 'Customer' :
-             primaryLabel === 'Customer Group' ? 'Customer Group' :
-             primaryLabel === 'Origin' ? 'Origin' :
-             primaryLabel === 'New Mis Item Group' ? 'New Mis Item Group' :
-             primaryLabel === 'Item Type (KVI/VA)' ? 'Item Type' :
-             primaryLabel === 'Packaging Type' ? 'Packaging Type' :
-             primaryLabel === 'Packaging Method' ? 'Packaging Method' :
-             primaryLabel === 'Sales Order Created By' ? 'Sales Order Created By' : primaryLabel;
-    excluded = activeFilters[primaryFiltKey];
+    dimKey = activeDims[0]; 
+    excluded = activeFilters[dimKey];
   }
 
   const dimDD = dd[dimKey];
