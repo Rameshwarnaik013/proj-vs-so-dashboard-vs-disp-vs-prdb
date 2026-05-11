@@ -742,7 +742,7 @@ function getFilteredData() {
   if (!dimDD) return DATA;
 
   // Sum monthly data excluding excluded values AND respecting month filter
-  const ALL_M_KEYS = ['proj','so','disp','pend','clsd','prdn','proj_qty','so_qty','disp_qty','pend_qty','clsd_qty','prdn_qty'];
+  const ALL_M_KEYS = ['proj','so','disp','pend','clsd','prdn','proj_qty','so_qty','disp_qty','pend_qty','clsd_qty','prdn_qty','so_amt'];
   const monthly = { months: MONTH_ORDER };
   ALL_M_KEYS.forEach(k => { monthly[k] = []; });
   MONTH_ORDER.forEach(m => {
@@ -764,14 +764,14 @@ function getFilteredData() {
   const qmap = {0:'Q1 (Apr-Jun)',1:'Q1 (Apr-Jun)',2:'Q1 (Apr-Jun)',3:'Q2 (Jul-Sep)',4:'Q2 (Jul-Sep)',5:'Q2 (Jul-Sep)',
                 6:'Q3 (Oct-Dec)',7:'Q3 (Oct-Dec)',8:'Q3 (Oct-Dec)',9:'Q4 (Jan-Mar)',10:'Q4 (Jan-Mar)',11:'Q4 (Jan-Mar)'};
   const qdata = {quarters:QTR_ORDER};
-  ['proj','so','disp','pend','clsd','prdn','proj_qty','so_qty','disp_qty','pend_qty','clsd_qty','prdn_qty'].forEach(k => { qdata[k] = [0,0,0,0]; });
+  ['proj','so','disp','pend','clsd','prdn','proj_qty','so_qty','disp_qty','pend_qty','clsd_qty','prdn_qty','so_amt'].forEach(k => { qdata[k] = [0,0,0,0,0]; });
   MONTH_ORDER.forEach((m, i) => {
     const qi = QTR_ORDER.indexOf(qmap[i]);
-    ['proj','so','disp','pend','clsd','prdn','proj_qty','so_qty','disp_qty','pend_qty','clsd_qty','prdn_qty'].forEach(k => { qdata[k][qi] += monthly[k][i]; });
+    ['proj','so','disp','pend','clsd','prdn','proj_qty','so_qty','disp_qty','pend_qty','clsd_qty','prdn_qty','so_amt'].forEach(k => { qdata[k][qi] += monthly[k][i]; });
   });
 
   const kpis = {};
-  ['proj','so','disp','pend','clsd','prdn','proj_qty','so_qty','disp_qty','pend_qty','clsd_qty','prdn_qty'].forEach(k => {
+  ['proj','so','disp','pend','clsd','prdn','proj_qty','so_qty','disp_qty','pend_qty','clsd_qty','prdn_qty','so_amt'].forEach(k => {
     kpis[k] = monthly[k].reduce((a,b)=>a+b,0);
   });
 
@@ -782,15 +782,16 @@ function getFilteredData() {
     Object.entries(dimData).forEach(([name, mdata]) => {
       if (dk === dimKey && excluded && excluded.has(name)) return;
       let p=0,s=0,d=0,pnd=0,c=0,r=0;
-      let pq=0,sq=0,dq=0,pndq=0,cq=0,rq=0;
+      let pq=0,sq=0,dq=0,pndq=0,cq=0,rq=0,sa=0;
       filteredMonths.forEach(m => {
         const md = mdata[m] || {};
         p += md.proj||0; s += md.so||0; d += md.disp||0; pnd += md.pend||0; c += md.clsd||0; r += md.prdn||0;
         pq += md.proj_qty||0; sq += md.so_qty||0; dq += md.disp_qty||0; pndq += md.pend_qty||0; cq += md.clsd_qty||0; rq += md.prdn_qty||0;
+        sa += md.so_amt||0;
       });
-      if (p === 0 && s === 0 && d === 0 && pnd === 0 && c === 0 && r === 0 && pq === 0 && sq === 0) return; // skip empty
+      if (p === 0 && s === 0 && d === 0 && pnd === 0 && c === 0 && r === 0 && pq === 0 && sq === 0 && sa === 0) return; // skip empty
       rows.push({name, proj:p, so:s, disp:d, pend:pnd, clsd:c, prdn:r,
-        proj_qty:pq, so_qty:sq, disp_qty:dq, pend_qty:pndq, clsd_qty:cq, prdn_qty:rq,
+        proj_qty:pq, so_qty:sq, disp_qty:dq, pend_qty:pndq, clsd_qty:cq, prdn_qty:rq, so_amt:sa,
         so_proj_pct: p>0 ? +(s/p*100).toFixed(1) : 0,
         disp_so_pct: s>0 ? +(d/s*100).toFixed(1) : 0,
         so_proj_pct_qty: pq>0 ? +(sq/pq*100).toFixed(1) : 0,
