@@ -491,7 +491,7 @@ const EMBEDDED_DATA = {"kpis": {"proj": 9261843.94,"so": 8431547.08,"disp": 7276
 
 
 
-const MONTH_ORDER = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26'];
+const MONTH_ORDER = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26'];
 const QTR_ORDER = ['Q1 (Apr-Jun)','Q2 (Jul-Sep)','Q3 (Oct-Dec)','Q4 (Jan-Mar)'];
 const METRICS = [
   {key:'proj', label:'Projection', color:'#f5a623'},
@@ -1058,7 +1058,7 @@ function handleExcelUpload(event) {
 }
 
 function processExcelData(projRows, soRows, prdnRows) {
-  const MONTHS = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26'];
+  const MONTHS = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26'];
   const MONTH_MAP = {April:'Apr-25',May:'May-25',June:'Jun-25',July:'Jul-25',August:'Aug-25',September:'Sep-25',October:'Oct-25',November:'Nov-25',December:'Dec-25',January:'Jan-26',February:'Feb-26',March:'Mar-26'};
   const QMAP_M = {'Apr-25':'Q1 (Apr-Jun)','May-25':'Q1 (Apr-Jun)','Jun-25':'Q1 (Apr-Jun)','Jul-25':'Q2 (Jul-Sep)','Aug-25':'Q2 (Jul-Sep)','Sep-25':'Q2 (Jul-Sep)','Oct-25':'Q3 (Oct-Dec)','Nov-25':'Q3 (Oct-Dec)','Dec-25':'Q3 (Oct-Dec)','Jan-26':'Q4 (Jan-Mar)','Feb-26':'Q4 (Jan-Mar)','Mar-26':'Q4 (Jan-Mar)'};
 
