@@ -16,7 +16,7 @@ def process_excel_data(file_path, progress_callback=None):
     log(f"[*] Starting high-speed streaming read of {os.path.basename(file_path)}...")
     start_time = time.time()
 
-    MONTHS = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26']
+    MONTHS = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26']
     DIMENSIONS = [
         'Item Parent', 'Customer', 'Customer Group', 'Origin', 
         'New Mis Item Group', 'Item Type(KVI/VALUE ADDED)', 
@@ -99,7 +99,7 @@ def process_excel_data(file_path, progress_callback=None):
                     if val_name == 'Jar Sealing - WAD Machine': val_name = 'Jar Sealing - WAD Machine/Table'
 
                     if val_name not in dim_data[dim]:
-                        dim_data[dim][val_name] = { m: { 'proj':0,'so':0,'disp':0,'pend':0,'clsd':0,'prdn':0, 'proj_qty':0,'so_qty':0,'disp_qty':0,'pend_qty':0,'clsd_qty':0,'prdn_qty':0 } for m in MONTHS }
+                        dim_data[dim][val_name] = { m: { 'proj':0,'so':0,'disp':0,'pend':0,'clsd':0,'prdn':0, 'proj_qty':0,'so_qty':0,'disp_qty':0,'pend_qty':0,'clsd_qty':0,'prdn_qty':0, 'so_amt':0 } for m in MONTHS }
                     
                     target_month = dim_data[dim][val_name][date_val]
                     for m_idx, m_target in metric_map.items():
@@ -112,7 +112,7 @@ def process_excel_data(file_path, progress_callback=None):
         # Load each sheet
         # Kg-based metrics
         parse_sheet(proj_sheet_name, {'Stock Qty In Kg':'proj', 'Projection Units':'proj_qty'})
-        parse_sheet(so_sheet_name, {'Stock Qty In Kg':'so', 'Qty':'so_qty', 'Delivered KGs':'disp', 'Delivered Qty':'disp_qty', 'Pending KGs':'pend', 'Closed KGs':'clsd'})
+        parse_sheet(so_sheet_name, {'Stock Qty In Kg':'so', 'Qty':'so_qty', 'Delivered KGs':'disp', 'Delivered Qty':'disp_qty', 'Pending KGs':'pend', 'Closed KGs':'clsd', 'Amount':'so_amt'})
         parse_sheet(prdn_sheet_name, {'Stock Qty In Kg':'prdn', 'Qty':'prdn_qty'})
 
         # Derive pending_qty and closed_qty from so_qty and disp_qty
@@ -134,7 +134,7 @@ def process_excel_data(file_path, progress_callback=None):
         # --- Aggregation logic ---
         log("[*] Finalizing calculations...")
         
-        ALL_KEYS = ['proj', 'so', 'disp', 'pend', 'clsd', 'prdn', 'proj_qty', 'so_qty', 'disp_qty', 'pend_qty', 'clsd_qty', 'prdn_qty']
+        ALL_KEYS = ['proj', 'so', 'disp', 'pend', 'clsd', 'prdn', 'proj_qty', 'so_qty', 'disp_qty', 'pend_qty', 'clsd_qty', 'prdn_qty', 'so_amt']
         monthly = { 'months': MONTHS }
         for k in ALL_KEYS:
             monthly[k] = []
@@ -163,16 +163,17 @@ def process_excel_data(file_path, progress_callback=None):
 
         filters = { d: sorted(list(dim_data[d].keys())) for d in DIMENSIONS }
         
-        QTR_ORDER = ['Q1 (Apr-Jun)', 'Q2 (Jul-Sep)', 'Q3 (Oct-Dec)', 'Q4 (Jan-Mar)']
+        QTR_ORDER = ['Q1 (Apr-Jun)', 'Q2 (Jul-Sep)', 'Q3 (Oct-Dec)', 'Q4 (Jan-Mar)', 'Q1 FY27 (Apr-Jun)']
         QMAP_M = {
             'Apr-25':0, 'May-25':0, 'Jun-25':0,
             'Jul-25':1, 'Aug-25':1, 'Sep-25':1,
             'Oct-25':2, 'Nov-25':2, 'Dec-25':2,
-            'Jan-26':3, 'Feb-26':3, 'Mar-26':3
+            'Jan-26':3, 'Feb-26':3, 'Mar-26':3,
+            'Apr-26':4
         }
         quarterly = { 'quarters': QTR_ORDER }
         for k in ALL_KEYS:
-            quarterly[k] = [0]*4
+            quarterly[k] = [0]*5
         for m in MONTHS:
             idx = QMAP_M[m]
             m_idx = MONTHS.index(m)
