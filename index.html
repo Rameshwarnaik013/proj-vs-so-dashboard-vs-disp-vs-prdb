@@ -189,6 +189,160 @@
   .filter-search { width:100%; background:var(--bg2); border:1px solid var(--border); border-radius:5px; padding:5px 8px; color:var(--text); font-family:inherit; font-size:10px; outline:none; margin-bottom:4px; box-sizing:border-box; transition:border-color .2s; }
   .filter-search:focus { border-color:var(--so); }
   .filter-search::placeholder { color:var(--text3); opacity:.6; }
+
+  /* ===== TOP 20 SKU SECTION ===== */
+  .top20-section {
+    margin-top: 28px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .top20-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .top20-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .top20-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .top20-title .trophy-icon {
+    font-size: 18px;
+  }
+  .top20-sub {
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .top20-toggles {
+    display: flex;
+    gap: 6px;
+  }
+  .top20-toggle-btn {
+    padding: 7px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--text2);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    font-family: inherit;
+  }
+  .top20-toggle-btn:hover {
+    border-color: var(--so);
+    color: var(--text);
+  }
+  .top20-toggle-btn.active {
+    background: linear-gradient(135deg, rgba(74,158,255,0.15), rgba(74,158,255,0.08));
+    border-color: var(--so);
+    color: var(--so);
+    box-shadow: 0 0 12px rgba(74,158,255,0.1);
+  }
+  .top20-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  @media (max-width: 1100px) {
+    .top20-grid { grid-template-columns: 1fr; }
+  }
+  .top20-col {
+    border-top: 1px solid var(--border);
+  }
+  .top20-col:first-child {
+    border-right: 1px solid var(--border);
+  }
+  .top20-col-header {
+    padding: 14px 20px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .top20-col-header .col-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .top20-list {
+    padding: 8px 0;
+  }
+  .top20-item {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 20px;
+    transition: background 0.15s;
+  }
+  .top20-item:hover {
+    background: var(--hover);
+  }
+  .top20-rank {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .top20-rank.gold { background: linear-gradient(135deg, #f5a623, #e8951a); color: #1a1e28; }
+  .top20-rank.silver { background: linear-gradient(135deg, #8b92a8, #6b7280); color: #1a1e28; }
+  .top20-rank.bronze { background: linear-gradient(135deg, #cd7f32, #b06c2a); color: #1a1e28; }
+  .top20-rank.normal { background: var(--bg4); color: var(--text2); }
+  .top20-info {
+    min-width: 0;
+  }
+  .top20-name {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
+  .top20-bar-wrap {
+    height: 4px;
+    background: var(--bg4);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .top20-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .top20-value {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
+    white-space: nowrap;
+    min-width: 70px;
+    text-align: right;
+  }
 </style>
 </head>
 <body>
@@ -284,6 +438,26 @@
           </table>
         </div>
       </div>
+
+      <!-- TOP 20 PERFORMING SKUs -->
+      <div class="top20-section" id="top20-section">
+        <div class="top20-header">
+          <div class="top20-header-left">
+            <div class="top20-title"><span class="trophy-icon">🏆</span> Top 20 Performing SKUs</div>
+            <div class="top20-sub" id="top20-sub">Ranked by SO (Stock Qty In Kg) · Item Name dimension</div>
+          </div>
+          <div class="top20-toggles" id="top20-toggles">
+            <button class="top20-toggle-btn active" data-sku-sort="so" id="top20-btn-so" onclick="setTop20Sort('so')">📦 SO (Kg)</button>
+            <button class="top20-toggle-btn" data-sku-sort="disp" id="top20-btn-disp" onclick="setTop20Sort('disp')">🚚 Dispatch (Kg)</button>
+            <button class="top20-toggle-btn" data-sku-sort="so_qty" id="top20-btn-so_qty" onclick="setTop20Sort('so_qty')">📊 SO (Qty)</button>
+            <button class="top20-toggle-btn" data-sku-sort="disp_qty" id="top20-btn-disp_qty" onclick="setTop20Sort('disp_qty')">📊 Dispatch (Qty)</button>
+          </div>
+        </div>
+        <div class="top20-grid" id="top20-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -1059,12 +1233,90 @@ function setMetricUnit(unit) {
   renderAll();
 }
 
+// Top 20 SKU sort state
+let top20SortKey = 'so';
+
+function setTop20Sort(key) {
+  top20SortKey = key;
+  document.querySelectorAll('.top20-toggle-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.skuSort === key);
+  });
+  renderTop20SKUs();
+}
+
+function renderTop20SKUs() {
+  const fd = getFilteredData();
+  const itemNameData = fd.tables['Item Name'] || [];
+  if (!itemNameData.length) {
+    document.getElementById('top20-grid').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">No Item Name data available</div>';
+    return;
+  }
+
+  const sortKey = top20SortKey;
+  const sortLabel = {
+    'so': 'SO (Stock Qty In Kg)',
+    'disp': 'Dispatch (Kg)',
+    'so_qty': 'SO (Qty Units)',
+    'disp_qty': 'Dispatch (Qty Units)'
+  }[sortKey] || sortKey;
+
+  document.getElementById('top20-sub').textContent = `Ranked by ${sortLabel} · Item Name dimension`;
+
+  // Sort and take top 20
+  const sorted = [...itemNameData].sort((a, b) => (b[sortKey] || 0) - (a[sortKey] || 0)).slice(0, 20);
+  const maxVal = sorted.length > 0 ? (sorted[0][sortKey] || 1) : 1;
+
+  // Split into two columns of 10
+  const col1 = sorted.slice(0, 10);
+  const col2 = sorted.slice(10, 20);
+
+  const barColor = (sortKey === 'so' || sortKey === 'so_qty') ? 'var(--so)' : 'var(--disp)';
+  const colDotColor = barColor;
+
+  function rankClass(i) {
+    if (i === 0) return 'gold';
+    if (i === 1) return 'silver';
+    if (i === 2) return 'bronze';
+    return 'normal';
+  }
+
+  function renderCol(items, startIdx) {
+    if (!items.length) return '<div class="top20-list" style="padding:20px;text-align:center;color:var(--text3)">—</div>';
+    return '<div class="top20-list">' + items.map((r, i) => {
+      const globalIdx = startIdx + i;
+      const val = r[sortKey] || 0;
+      const pct = maxVal > 0 ? (val / maxVal * 100) : 0;
+      return `<div class="top20-item">
+        <div class="top20-rank ${rankClass(globalIdx)}">${globalIdx + 1}</div>
+        <div class="top20-info">
+          <div class="top20-name" title="${r.name}">${r.name}</div>
+          <div class="top20-bar-wrap"><div class="top20-bar" style="width:${pct.toFixed(1)}%;background:${barColor}"></div></div>
+        </div>
+        <div class="top20-value">${fmt(val)}</div>
+      </div>`;
+    }).join('') + '</div>';
+  }
+
+  const grid = document.getElementById('top20-grid');
+  grid.innerHTML = `
+    <div class="top20-col">
+      <div class="top20-col-header"><span class="col-dot" style="background:${colDotColor}"></span>Rank 1 – 10</div>
+      ${renderCol(col1, 0)}
+    </div>
+    <div class="top20-col">
+      <div class="top20-col-header"><span class="col-dot" style="background:${colDotColor}"></span>Rank 11 – 20</div>
+      ${renderCol(col2, 10)}
+    </div>
+  `;
+}
+
 function renderAll() {
   const fd = getFilteredData();
   renderKPIs(fd);
   renderCharts(fd);
   renderDimTabs();
   renderTable();
+  renderTop20SKUs();
 }
 
 // ============================================================
