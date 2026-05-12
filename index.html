@@ -458,6 +458,9 @@
             <div class="top20-title"><span class="trophy-icon">🏆</span> Top 20 Performers</div>
             <div class="top20-sub" id="top20-sub" style="display:flex; gap:10px; align-items:center;">
               <span id="top20-sub-text">Ranked by SO (Stock Qty In Kg)</span>
+              <select class="dim-select" id="top20-origin-filter" onchange="setTB20OriginFilter(this.value)">
+                <option value="">All Origins</option>
+              </select>
               <select class="dim-select" id="top20-dim-select" onchange="setTop20Dim(this.value)">
                 <option value="Item Name">Item Name</option>
                 <option value="Origin">Origin</option>
@@ -485,6 +488,9 @@
             <div class="top20-title"><span class="trophy-icon">⚠️</span> Bottom 20 Performers</div>
             <div class="top20-sub" id="bottom20-sub" style="display:flex; gap:10px; align-items:center;">
               <span id="bottom20-sub-text">Lowest by SO (Stock Qty In Kg)</span>
+              <select class="dim-select" id="bottom20-origin-filter" onchange="setTB20OriginFilter(this.value)">
+                <option value="">All Origins</option>
+              </select>
               <select class="dim-select" id="bottom20-dim-select" onchange="setBottom20Dim(this.value)">
                 <option value="Item Name">Item Name</option>
                 <option value="Origin">Origin</option>
@@ -1300,7 +1306,12 @@ function setTop20Sort(key) {
 
 function renderTop20SKUs() {
   const fd = getFilteredData();
-  const itemNameData = fd.tables[top20DimKey] || [];
+  let itemNameData = fd.tables[top20DimKey] || [];
+  if (tb20OriginFilter) {
+      const rawData = fd.tables['Origin + Item Name'] || [];
+      const prefix = '[' + tb20OriginFilter + '] ';
+      itemNameData = rawData.filter(r => r.name.startsWith(prefix));
+  }
   if (!itemNameData.length) {
     document.getElementById('top20-grid').innerHTML = `<div style="padding:40px;text-align:center;color:var(--text3)">No ${top20DimKey} data available</div>`;
     return;
@@ -1366,6 +1377,7 @@ function renderTop20SKUs() {
 }
 
 function renderAll() {
+  populateTB20OriginFilter();
   const fd = getFilteredData();
   renderKPIs(fd);
   renderCharts(fd);
@@ -1376,6 +1388,32 @@ function renderAll() {
 }
 
 // Bottom 20 SKU sort state
+let tb20OriginFilter = '';
+function setTB20OriginFilter(val) {
+  tb20OriginFilter = val;
+  const el1 = document.getElementById('top20-origin-filter');
+  const el2 = document.getElementById('bottom20-origin-filter');
+  if (el1) el1.value = val;
+  if (el2) el2.value = val;
+  renderTop20SKUs();
+  renderBottom20SKUs();
+}
+
+function populateTB20OriginFilter() {
+  const dd = DATA.dim_data['Origin'] || {};
+  const origins = Object.keys(dd).sort();
+  let opts = '<option value="">All Origins</option>';
+  origins.forEach(o => {
+    opts += `<option value="${o}">${o}</option>`;
+  });
+  const el1 = document.getElementById('top20-origin-filter');
+  const el2 = document.getElementById('bottom20-origin-filter');
+  if (el1) el1.innerHTML = opts;
+  if (el2) el2.innerHTML = opts;
+  if (el1) el1.value = tb20OriginFilter;
+  if (el2) el2.value = tb20OriginFilter;
+}
+
 let bottom20SortKey = 'so';
 let bottom20DimKey = 'Origin + Item Name';
 
@@ -1394,7 +1432,12 @@ function setBottom20Sort(key) {
 
 function renderBottom20SKUs() {
   const fd = getFilteredData();
-  const itemNameData = fd.tables[bottom20DimKey] || [];
+  let itemNameData = fd.tables[bottom20DimKey] || [];
+  if (tb20OriginFilter) {
+      const rawData = fd.tables['Origin + Item Name'] || [];
+      const prefix = '[' + tb20OriginFilter + '] ';
+      itemNameData = rawData.filter(r => r.name.startsWith(prefix));
+  }
   if (!itemNameData.length) {
     document.getElementById('bottom20-grid').innerHTML = `<div style="padding:40px;text-align:center;color:var(--text3)">No ${bottom20DimKey} data available</div>`;
     return;
