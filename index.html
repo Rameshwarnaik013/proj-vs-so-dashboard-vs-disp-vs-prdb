@@ -1401,7 +1401,10 @@ function setTB20OriginFilter(val) {
 
 function populateTB20OriginFilter() {
   const dd = DATA.dim_data['Origin'] || {};
-  const origins = Object.keys(dd).sort();
+  const excludeList = ['Unknown'];
+  const origins = Object.keys(dd)
+    .filter(o => !excludeList.includes(o) && !o.includes('@'))
+    .sort();
   let opts = '<option value="">All Origins</option>';
   origins.forEach(o => {
     opts += `<option value="${o}">${o}</option>`;
