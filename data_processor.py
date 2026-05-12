@@ -21,7 +21,7 @@ def process_excel_data(file_path, progress_callback=None):
         'Item Parent', 'Customer', 'Customer Group', 'Origin', 
         'New Mis Item Group', 'Item Type(KVI/VALUE ADDED)', 
         'Packaging Type ', 'Packaging Method', 'Sales Order Created By',
-        'Item Name'
+        'Item Name', 'Origin + Item Name'
     ]
 
     # Structure to hold the aggregates
@@ -71,6 +71,9 @@ def process_excel_data(file_path, progress_callback=None):
                 if m_source in header_row:
                     metric_map[header_row.index(m_source)] = m_target
 
+            origin_idx = next((header_row.index(h) for h in header_row if h.strip() == 'Origin'), -1)
+            item_idx = next((header_row.index(h) for h in header_row if h.strip() == 'Item Name'), -1)
+
             # 2. Iterate Rows
             for i, row in enumerate(ws.iter_rows(min_row=h_row_idx + 1)):
                 if (i + 1) % 10000 == 0:
@@ -92,9 +95,17 @@ def process_excel_data(file_path, progress_callback=None):
                 if date_val not in MONTHS: continue
 
                 # Process Metrics for each dimension
-                for dim, d_idx in dim_map.items():
-                    if d_idx >= len(row): continue
-                    val_name = str(row[d_idx].value).strip() if row[d_idx].value is not None else "Unknown"
+                for dim in DIMENSIONS:
+                    val_name = "Unknown"
+                    if dim == 'Origin + Item Name':
+                        o_val = str(row[origin_idx].value).strip() if origin_idx >= 0 and origin_idx < len(row) and row[origin_idx].value is not None else "Unknown"
+                        i_val = str(row[item_idx].value).strip() if item_idx >= 0 and item_idx < len(row) and row[item_idx].value is not None else "Unknown"
+                        val_name = f"[{o_val}] {i_val}"
+                    else:
+                        d_idx = dim_map.get(dim, -1)
+                        if d_idx >= 0 and d_idx < len(row):
+                            val_name = str(row[d_idx].value).strip() if row[d_idx].value is not None else "Unknown"
+                    
                     if not val_name or val_name == 'None': val_name = "Unknown"
                     if val_name == 'Jar Sealing - WAD Machine': val_name = 'Jar Sealing - WAD Machine/Table'
 
