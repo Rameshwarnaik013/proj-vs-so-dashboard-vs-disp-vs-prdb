@@ -523,8 +523,8 @@ const EMBEDDED_DATA = {"kpis": {"proj": 9893515.64,"so": 9218747.34,"disp": 7898
 
 
 
-const MONTH_ORDER = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26'];
-const QTR_ORDER = ['Q1 (Apr-Jun)','Q2 (Jul-Sep)','Q3 (Oct-Dec)','Q4 (Jan-Mar)'];
+const MONTH_ORDER = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26'];
+const QTR_ORDER = ['Q1 (Apr-Jun)','Q2 (Jul-Sep)','Q3 (Oct-Dec)','Q4 (Jan-Mar)','Q1 FY27 (Apr-Jun)'];
 const METRICS = [
   {key:'proj', label:'Projection', color:'#f5a623'},
   {key:'so',   label:'SO',         color:'#4a9eff'},
@@ -794,7 +794,8 @@ function getFilteredData() {
 
   // Quarterly
   const qmap = {0:'Q1 (Apr-Jun)',1:'Q1 (Apr-Jun)',2:'Q1 (Apr-Jun)',3:'Q2 (Jul-Sep)',4:'Q2 (Jul-Sep)',5:'Q2 (Jul-Sep)',
-                6:'Q3 (Oct-Dec)',7:'Q3 (Oct-Dec)',8:'Q3 (Oct-Dec)',9:'Q4 (Jan-Mar)',10:'Q4 (Jan-Mar)',11:'Q4 (Jan-Mar)'};
+                6:'Q3 (Oct-Dec)',7:'Q3 (Oct-Dec)',8:'Q3 (Oct-Dec)',9:'Q4 (Jan-Mar)',10:'Q4 (Jan-Mar)',11:'Q4 (Jan-Mar)',
+                12:'Q1 FY27 (Apr-Jun)',13:'Q1 FY27 (Apr-Jun)'};
   const qdata = {quarters:QTR_ORDER};
   ['proj','so','disp','pend','clsd','prdn','proj_qty','so_qty','disp_qty','pend_qty','clsd_qty','prdn_qty','so_amt'].forEach(k => { qdata[k] = [0,0,0,0,0]; });
   MONTH_ORDER.forEach((m, i) => {
@@ -1091,9 +1092,9 @@ function handleExcelUpload(event) {
 }
 
 function processExcelData(projRows, soRows, prdnRows) {
-  const MONTHS = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26'];
+  const MONTHS = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26'];
   const MONTH_MAP = {April:'Apr-25',May:'May-25',June:'Jun-25',July:'Jul-25',August:'Aug-25',September:'Sep-25',October:'Oct-25',November:'Nov-25',December:'Dec-25',January:'Jan-26',February:'Feb-26',March:'Mar-26'};
-  const QMAP_M = {'Apr-25':'Q1 (Apr-Jun)','May-25':'Q1 (Apr-Jun)','Jun-25':'Q1 (Apr-Jun)','Jul-25':'Q2 (Jul-Sep)','Aug-25':'Q2 (Jul-Sep)','Sep-25':'Q2 (Jul-Sep)','Oct-25':'Q3 (Oct-Dec)','Nov-25':'Q3 (Oct-Dec)','Dec-25':'Q3 (Oct-Dec)','Jan-26':'Q4 (Jan-Mar)','Feb-26':'Q4 (Jan-Mar)','Mar-26':'Q4 (Jan-Mar)'};
+  const QMAP_M = {'Apr-25':'Q1 (Apr-Jun)','May-25':'Q1 (Apr-Jun)','Jun-25':'Q1 (Apr-Jun)','Jul-25':'Q2 (Jul-Sep)','Aug-25':'Q2 (Jul-Sep)','Sep-25':'Q2 (Jul-Sep)','Oct-25':'Q3 (Oct-Dec)','Nov-25':'Q3 (Oct-Dec)','Dec-25':'Q3 (Oct-Dec)','Jan-26':'Q4 (Jan-Mar)','Feb-26':'Q4 (Jan-Mar)','Mar-26':'Q4 (Jan-Mar)','Apr-26':'Q1 FY27 (Apr-Jun)','May-26':'Q1 FY27 (Apr-Jun)'};
 
   // Mapping per user request:
   const COL_PROG_VAL = ['Stock Qty In Kg', 'Planned Qty', 'Projected Qty'];
