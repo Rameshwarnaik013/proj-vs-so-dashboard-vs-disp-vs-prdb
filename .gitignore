@@ -6,3 +6,7 @@
 
 # Vercel temporary files
 .vercel
+
+# Python
+__pycache__/
+*.pyc

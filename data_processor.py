@@ -16,7 +16,7 @@ def process_excel_data(file_path, progress_callback=None):
     log(f"[*] Starting high-speed streaming read of {os.path.basename(file_path)}...")
     start_time = time.time()
 
-    MONTHS = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26']
+    MONTHS = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26']
     DIMENSIONS = [
         'Item Parent', 'Customer', 'Customer Group', 'Origin', 
         'New Mis Item Group', 'Item Type(KVI/VALUE ADDED)', 
@@ -180,7 +180,7 @@ def process_excel_data(file_path, progress_callback=None):
             'Jul-25':1, 'Aug-25':1, 'Sep-25':1,
             'Oct-25':2, 'Nov-25':2, 'Dec-25':2,
             'Jan-26':3, 'Feb-26':3, 'Mar-26':3,
-            'Apr-26':4, 'May-26':4
+            'Apr-26':4, 'May-26':4, 'Jun-26':4
         }
         quarterly = { 'quarters': QTR_ORDER }
         for k in ALL_KEYS:
