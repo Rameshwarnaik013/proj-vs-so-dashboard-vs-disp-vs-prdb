@@ -69,7 +69,8 @@ def process_excel_data(file_path, progress_callback=None):
             metric_map = {}
             for m_source, m_target in extra_metrics.items():
                 if m_source in header_row:
-                    metric_map[header_row.index(m_source)] = m_target
+                    targets = m_target if isinstance(m_target, list) else [m_target]
+                    metric_map[header_row.index(m_source)] = targets
 
             origin_idx = next((header_row.index(h) for h in header_row if h.strip() == 'Origin'), -1)
             item_idx = next((header_row.index(h) for h in header_row if h.strip() == 'Item Name'), -1)
@@ -113,18 +114,21 @@ def process_excel_data(file_path, progress_callback=None):
                         dim_data[dim][val_name] = { m: { 'proj':0,'so':0,'disp':0,'pend':0,'clsd':0,'prdn':0, 'proj_qty':0,'so_qty':0,'disp_qty':0,'pend_qty':0,'clsd_qty':0,'prdn_qty':0, 'so_amt':0 } for m in MONTHS }
                     
                     target_month = dim_data[dim][val_name][date_val]
-                    for m_idx, m_target in metric_map.items():
+                    for m_idx, targets in metric_map.items():
                         if m_idx < len(row):
                             val = row[m_idx].value
                             try:
-                                target_month[m_target] += float(val) if val is not None else 0
-                            except: pass
+                                fval = float(val) if val is not None else 0
+                            except: continue
+                            for m_target in targets:
+                                target_month[m_target] += fval
 
         # Load each sheet
         # Kg-based metrics
         parse_sheet(proj_sheet_name, {'Stock Qty In Kg':'proj', 'Projection Units':'proj_qty'})
         parse_sheet(so_sheet_name, {'Stock Qty In Kg':'so', 'Qty':'so_qty', 'Delivered KGs':'disp', 'Delivered Qty':'disp_qty', 'Pending KGs':'pend', 'Closed KGs':'clsd', 'Amount':'so_amt'})
-        parse_sheet(prdn_sheet_name, {'Stock Qty In Kg':'prdn', 'Qty':'prdn_qty'})
+        # Production is calculated from Qty (not Stock Qty In Kg) - feeds both 'prdn' and 'prdn_qty'
+        parse_sheet(prdn_sheet_name, {'Qty': ['prdn', 'prdn_qty']})
 
         # Derive pending_qty and closed_qty from so_qty and disp_qty
         for dim in DIMENSIONS:
