@@ -50,6 +50,11 @@ def process_excel_data(file_path, progress_callback=None):
             'RPC UD Foods Finished Goods - CBSPL',
         }
 
+        # Rows actually counted per sheet per month (post-filtering) - lets downstream
+        # publishing logic detect months with implausibly few rows (incomplete data)
+        # instead of blindly trusting every reprocess.
+        row_counts = {'proj': {}, 'so': {}, 'prdn': {}}
+
         def parse_sheet(sheet_name, extra_metrics):
             log(f"Reading {sheet_name}...")
             ws = wb[sheet_name]
@@ -87,6 +92,7 @@ def process_excel_data(file_path, progress_callback=None):
             item_idx = next((header_row.index(h) for h in header_row if h.strip() == 'Item Name'), -1)
 
             is_prdn = (sheet_name == prdn_sheet_name)
+            sheet_role = 'proj' if sheet_name == proj_sheet_name else ('so' if sheet_name == so_sheet_name else 'prdn')
             target_wh_idx = next((header_row.index(h) for h in header_row if h.strip() == 'Target Warehouse'), -1) if is_prdn else -1
             filtered_count = 0
 
@@ -116,6 +122,8 @@ def process_excel_data(file_path, progress_callback=None):
                     if tw_val not in PRDN_FG_WAREHOUSES:
                         filtered_count += 1
                         continue
+
+                row_counts[sheet_role][date_val] = row_counts[sheet_role].get(date_val, 0) + 1
 
                 # Process Metrics for each dimension
                 for dim in DIMENSIONS:
@@ -226,7 +234,8 @@ def process_excel_data(file_path, progress_callback=None):
             'quarterly': quarterly,
             'tables': tables,
             'filters': filters,
-            'dim_data': dim_data
+            'dim_data': dim_data,
+            'row_counts': row_counts
         }
 
         duration = time.time() - start_time

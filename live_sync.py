@@ -8,13 +8,16 @@ import webbrowser
 import sys
 import traceback
 from data_processor import process_excel_data
+from auto_publish import safe_merge_and_publish
 import queue
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 PORT = 8080
-FILENAME = "Projection vs so vs disp vs prdn dashboard.xlsx"
+FILENAME = r"C:\Users\Admin\Desktop\jatot\Download\Projection vs so vs disp vs prdn dashboard.xlsx"
+REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+HTML_PATH = os.path.join(REPO_DIR, "index.html")
 POLL_INTERVAL = 1.0  # Seconds
 HEARTBEAT_INTERVAL = 5 # More frequent pings for live progress
 
@@ -78,12 +81,19 @@ def watch_file():
                 try:
                     def progress_cb(msg):
                         notify_clients("progress", msg)
-                    
+
                     new_data = process_excel_data(FILENAME, progress_cb)
                     if new_data:
-                        cached_data = new_data
+                        notify_clients("processing", "Publishing update (safety checks + git push)...")
+                        publish_result = safe_merge_and_publish(new_data, REPO_DIR, HTML_PATH, log=progress_cb)
+                        cached_data = publish_result['data']
                         last_mtime = curr_mtime
-                        notify_clients("update", "Dashboard Updated")
+                        if publish_result['error']:
+                            notify_clients("error_msg", f"Publish failed: {publish_result['error']}")
+                        elif publish_result['frozen']:
+                            notify_clients("update", f"Dashboard Updated ({len(publish_result['frozen'])} values frozen - low row count)")
+                        else:
+                            notify_clients("update", "Dashboard Updated & Published")
                     else:
                         notify_clients("error_msg", "Excel Processing Failed")
                 finally:
@@ -199,9 +209,13 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         if cached_data is None:
-            # First run or missing data, try to process now
+            # First run or missing data, try to process now (display-only: don't
+            # commit/push here, only the watcher's change-detection path publishes)
             print("[*] Cache empty. Processing file for the first time...")
-            cached_data = process_excel_data(FILENAME)
+            raw_data = process_excel_data(FILENAME)
+            if raw_data:
+                result = safe_merge_and_publish(raw_data, REPO_DIR, HTML_PATH, log=print, publish=False)
+                cached_data = result['data']
             
         if cached_data is None:
             self.send_error(503, "Data not available and failed to process")
