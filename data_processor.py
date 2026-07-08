@@ -39,6 +39,17 @@ def process_excel_data(file_path, progress_callback=None):
         if not all([proj_sheet_name, so_sheet_name, prdn_sheet_name]):
             raise ValueError(f"Missing required sheets. Found: {all_sheets}")
 
+        # Prdn tab only: only rows landing in one of these Finished Goods Stores warehouses
+        # count as real production. Everything else (raw material, WIP, packaging, samples,
+        # reprocessing, returns, other plants not listed) is excluded entirely.
+        PRDN_FG_WAREHOUSES = {
+            'RPC Indore - Finished Goods Stores - CBSPL',
+            'RPC Kundli - Finished Goods Stores - CBSPL',
+            'RPC Purnia Finished Goods - CBSPL',
+            'RPC Functional & Innovative Foods Finished Goods - CBSPL',
+            'RPC UD Foods Finished Goods - CBSPL',
+        }
+
         def parse_sheet(sheet_name, extra_metrics):
             log(f"Reading {sheet_name}...")
             ws = wb[sheet_name]
@@ -75,11 +86,15 @@ def process_excel_data(file_path, progress_callback=None):
             origin_idx = next((header_row.index(h) for h in header_row if h.strip() == 'Origin'), -1)
             item_idx = next((header_row.index(h) for h in header_row if h.strip() == 'Item Name'), -1)
 
+            is_prdn = (sheet_name == prdn_sheet_name)
+            target_wh_idx = next((header_row.index(h) for h in header_row if h.strip() == 'Target Warehouse'), -1) if is_prdn else -1
+            filtered_count = 0
+
             # 2. Iterate Rows
             for i, row in enumerate(ws.iter_rows(min_row=h_row_idx + 1)):
                 if (i + 1) % 10000 == 0:
                     log(f"    -> {sheet_name}: {i + 1} rows...")
-                
+
                 # Check for empty data
                 if len(row) <= date_idx or not row[date_idx].value:
                     continue
@@ -94,6 +109,13 @@ def process_excel_data(file_path, progress_callback=None):
                 except: continue
 
                 if date_val not in MONTHS: continue
+
+                # Prdn tab: only count rows landing in a Finished Goods Stores warehouse
+                if is_prdn:
+                    tw_val = str(row[target_wh_idx].value).strip() if target_wh_idx >= 0 and target_wh_idx < len(row) and row[target_wh_idx].value is not None else ""
+                    if tw_val not in PRDN_FG_WAREHOUSES:
+                        filtered_count += 1
+                        continue
 
                 # Process Metrics for each dimension
                 for dim in DIMENSIONS:
@@ -122,6 +144,9 @@ def process_excel_data(file_path, progress_callback=None):
                             except: continue
                             for m_target in targets:
                                 target_month[m_target] += fval
+
+            if is_prdn and filtered_count:
+                log(f"    -> {sheet_name}: excluded {filtered_count} rows outside the 5 Finished Goods Stores warehouses")
 
         # Load each sheet
         # Kg-based metrics
